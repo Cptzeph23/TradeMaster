@@ -12,24 +12,8 @@ Production-grade automated forex trading system with AI natural language command
 - **Brokers**: OANDA, MetaTrader 5
 - **Analysis**: pandas, numpy, ta, vectorbt
 
-## Phase Build Plan
-- [x] Phase A — Project Scaffolding
-- [ ] Phase B — Database Models
-- [ ] Phase C — Authentication & Accounts
-- [ ] Phase D — Strategy Engine
-- [ ] Phase E — Market Data Layer
-- [ ] Phase F — Trading Engine
-- [ ] Phase G — Risk Management
-- [ ] Phase H — Backtesting Engine
-- [ ] Phase I — Celery Workers & Scheduler
-- [ ] Phase J — REST API Layer
-- [ ] Phase K — NLP Command Interface
-- [ ] Phase L — WebSocket / Realtime
-- [ ] Phase M — Web Dashboard
-- [ ] Phase N — Security Hardening
-- [ ] Phase O — Deployment
 
-## Quick Start (after Phase O)
+## Quick Start 
 ```bash
 # 1. Clone and setup
 git clone <repo> /opt/forex_bot
@@ -58,4 +42,3 @@ celery -A config.celery worker -Q trading,orders,data,commands --loglevel=info
 ```
 
 ## Project Structure
-See /docs/architecture.md (generated in Phase A)
