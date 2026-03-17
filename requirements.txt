@@ -1,7 +1,7 @@
 # ============================================================
-# DESTINATION: /opt/forex_bot/requirements.txt
+# DESTINATION: forex_bot/requirements.txt
 # Forex Trading Bot Platform — Production Dependencies
-# Python 3.11+  |  Ubuntu 22.04 LTS
+# Python 3.11+  |  Ubuntu 24.04 LTS
 # ============================================================
 
 # ── Django Core ─────────────────────────────────────────────

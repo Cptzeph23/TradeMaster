@@ -1,4 +1,6 @@
 bot/
+bot
+.env/
 
 .idea/
 *.iml
