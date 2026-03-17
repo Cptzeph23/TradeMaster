@@ -2,6 +2,8 @@ bot/
 bot
 .env/
 
+.env.example
+
 .idea/
 *.iml
 *.log
