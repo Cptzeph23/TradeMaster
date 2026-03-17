@@ -1,5 +1,4 @@
 # ============================================================
-# ABSOLUTE PATH: /opt/forex_bot/apps/accounts/models.py
 # User, UserProfile, TradingAccount models
 # ============================================================
 import uuid
