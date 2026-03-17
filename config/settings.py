@@ -354,8 +354,8 @@ LOGGING = {
 }
 
 # ── Sentry ───────────────────────────────────────────────────
-SENTRY_DSN = env('SENTRY_DSN', default='')
-if SENTRY_DSN:
+SENTRY_DSN = env('SENTRY_DSN', default=None)
+if SENTRY_DSN and SENTRY_DSN.strip() and SENTRY_DSN.startswith('http'):
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.celery import CeleryIntegration

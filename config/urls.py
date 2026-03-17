@@ -1,5 +1,4 @@
 # ============================================================
-# DESTINATION: /opt/forex_bot/config/urls.py
 # Master URL Configuration
 # ============================================================
 from django.contrib import admin
