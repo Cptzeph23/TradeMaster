@@ -1,0 +1,86 @@
+# ============================================================
+# DESTINATION: /opt/forex_bot/requirements.txt
+# Forex Trading Bot Platform — Production Dependencies
+# Python 3.11+  |  Ubuntu 22.04 LTS
+# ============================================================
+
+# ── Django Core ─────────────────────────────────────────────
+Django==5.0.4
+django-environ==0.11.2
+django-extensions==3.2.3
+django-filter==24.2
+
+# ── Django REST Framework ────────────────────────────────────
+djangorestframework==3.15.1
+djangorestframework-simplejwt==5.3.1
+drf-spectacular==0.27.2
+django-cors-headers==4.3.1
+
+# ── Database ─────────────────────────────────────────────────
+psycopg2-binary==2.9.9
+django-redis==5.4.0
+
+# ── Async / Workers ──────────────────────────────────────────
+celery==5.3.6
+redis==5.0.3
+kombu==5.3.3
+django-celery-beat==2.6.0
+django-celery-results==2.5.1
+
+# ── WebSockets / Realtime ────────────────────────────────────
+channels==4.0.0
+channels-redis==4.2.0
+daphne==4.1.0
+
+# ── Security ─────────────────────────────────────────────────
+cryptography==42.0.5
+django-ratelimit==4.1.0
+PyJWT==2.8.0
+argon2-cffi==23.1.0
+
+# ── Trading & Market Data ────────────────────────────────────
+MetaTrader5==5.0.45
+oandapyV20==0.7.2
+alpha_vantage==3.0.0
+
+# ── Data Science / Analysis ──────────────────────────────────
+pandas==2.2.2
+numpy==1.26.4
+ta==0.11.0
+scipy==1.13.0
+
+# ── Backtesting ──────────────────────────────────────────────
+vectorbt==0.26.2
+
+# ── NLP / AI Command Interface ───────────────────────────────
+anthropic==0.25.7
+openai==1.25.0
+python-dateutil==2.9.0
+
+# ── HTTP / Networking ────────────────────────────────────────
+httpx==0.27.0
+aiohttp==3.9.5
+requests==2.31.0
+websockets==12.0
+
+# ── Utilities ────────────────────────────────────────────────
+python-decouple==3.8
+python-dotenv==1.0.1
+structlog==24.1.0
+rich==13.7.1
+click==8.1.7
+pydantic==2.7.1
+arrow==1.3.0
+pytz==2024.1
+
+# ── File / Storage ───────────────────────────────────────────
+Pillow==10.3.0
+django-storages==1.14.2
+
+# ── Monitoring ───────────────────────────────────────────────
+sentry-sdk==2.2.0
+
+# ── Production Server ────────────────────────────────────────
+gunicorn==22.0.0
+uvicorn[standard]==0.29.0
+whitenoise==6.6.0
