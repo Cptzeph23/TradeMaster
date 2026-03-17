@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # ============================================================
-# DESTINATION: /opt/forex_bot/manage.py
 # Django management entry point
 # ============================================================
 """Django's command-line utility for administrative tasks."""
