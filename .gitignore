@@ -4,6 +4,8 @@ bot
 
 .env.example
 
+test_apis.sh
+
 .idea/
 *.iml
 *.log
