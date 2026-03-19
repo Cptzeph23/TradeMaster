@@ -20,6 +20,7 @@ reset_and_setup.sh
 test_trading_8001.sh
 test_risk.sh
 test_backtesting.sh
+test_nlp.sh
 
 
 .idea/
