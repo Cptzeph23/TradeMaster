@@ -15,6 +15,10 @@ test_risk_management.sh
 test_portfolio_management.sh
 test_reporting.sh
 test_utils.sh   
+test_trading.sh
+reset_and_setup.sh
+test_trading_8001.sh
+
 
 .idea/
 *.iml
