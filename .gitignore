@@ -18,6 +18,7 @@ test_utils.sh
 test_trading.sh
 reset_and_setup.sh
 test_trading_8001.sh
+test_risk.sh
 
 
 .idea/
