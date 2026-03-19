@@ -1,6 +1,4 @@
-# ============================================================
-# ABSOLUTE PATH: /opt/forex_bot/apps/strategies/plugins/ma_crossover.py
-# ============================================================
+
 import pandas as pd
 import ta
 from ..base import BaseStrategy, Signal
