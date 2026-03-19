@@ -381,3 +381,66 @@ class NLPCommand(models.Model):
             f"Command [{self.command_type}] by {self.user.email} "
             f"→ {self.status} @ {self.created_at:%Y-%m-%d %H:%M}"
         )
+
+
+RADING_BOT_EXTRA_METHOD = '''
+    def apply_nlp_settings(self, parsed_intent: dict) -> dict:
+        """
+        Apply parsed NLP command settings to the bot.
+        Called by the NLP command executor (Phase K).
+ 
+        Returns dict of what was actually changed.
+        """
+        changed = {}
+        rs = dict(self.risk_settings)  # copy
+ 
+        mappings = {
+            'risk_percent':       ('risk_settings', float),
+            'stop_loss_pips':     ('risk_settings', float),
+            'take_profit_pips':   ('risk_settings', float),
+            'max_trades_per_day': ('risk_settings', int),
+            'max_open_trades':    ('risk_settings', int),
+            'max_drawdown_percent': ('risk_settings', float),
+            'trailing_stop_enabled': ('risk_settings', bool),
+            'trailing_stop_pips': ('risk_settings', float),
+            'allow_buy':          ('bot_field',     bool),
+            'allow_sell':         ('bot_field',     bool),
+            'timeframe':          ('bot_field',     str),
+            'symbols':            ('bot_field',     list),
+        }
+ 
+        for key, (target, cast) in mappings.items():
+            if key in parsed_intent:
+                val = parsed_intent[key]
+                try:
+                    val = cast(val)
+                except (ValueError, TypeError):
+                    continue
+                if target == 'risk_settings':
+                    rs[key] = val
+                elif target == 'bot_field':
+                    setattr(self, key, val)
+                changed[key] = val
+ 
+        self.risk_settings = rs
+        update_fields = ['risk_settings']
+        if 'allow_buy'  in changed: update_fields.append('allow_buy')
+        if 'allow_sell' in changed: update_fields.append('allow_sell')
+        if 'timeframe'  in changed: update_fields.append('timeframe')
+        if 'symbols'    in changed: update_fields.append('symbols')
+ 
+        self.save(update_fields=update_fields)
+ 
+        # Sync RiskRule model if it exists
+        try:
+            rule = self.risk_rule
+            for key, val in changed.items():
+                if hasattr(rule, key):
+                    setattr(rule, key, val)
+            rule.save()
+        except Exception:
+            pass
+ 
+        return changed
+'''
+ 
