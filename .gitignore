@@ -5,6 +5,8 @@ bot
 .env.example
 
 test_apis.sh
+test_strategies.sh
+test_webhooks.sh
 
 .idea/
 *.iml

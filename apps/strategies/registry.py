@@ -1,8 +1,7 @@
-# ============================================================
-# Strategy plugin registry — auto-discovers all strategy classes
-# ============================================================
+
 import importlib
 import logging
+import traceback
 from typing import Dict, Type
 from .base import BaseStrategy
 
@@ -10,35 +9,13 @@ logger = logging.getLogger('trading')
 
 
 class StrategyRegistry:
-    """
-    Singleton registry that maps strategy type slugs to their
-    plugin classes.
-
-    Strategies are registered either:
-      1. Automatically via auto_discover() at app startup
-      2. Manually via @StrategyRegistry.register decorator
-
-    Usage:
-        cls   = StrategyRegistry.get('ma_crossover')
-        inst  = cls(parameters={'fast_period': 50, 'slow_period': 200})
-        signal = inst.generate_signal(df, 'EUR_USD')
-    """
     _registry: Dict[str, Type[BaseStrategy]] = {}
 
     @classmethod
     def register(cls, slug: str):
-        """
-        Decorator to register a strategy class under a slug.
-
-        @StrategyRegistry.register('ma_crossover')
-        class MACrossoverStrategy(BaseStrategy):
-            ...
-        """
         def decorator(strategy_cls: Type[BaseStrategy]):
             if not issubclass(strategy_cls, BaseStrategy):
-                raise TypeError(
-                    f"{strategy_cls.__name__} must inherit from BaseStrategy"
-                )
+                raise TypeError(f"{strategy_cls.__name__} must inherit from BaseStrategy")
             cls._registry[slug] = strategy_cls
             logger.debug(f"Strategy registered: '{slug}' → {strategy_cls.__name__}")
             return strategy_cls
@@ -46,7 +23,6 @@ class StrategyRegistry:
 
     @classmethod
     def get(cls, slug: str) -> Type[BaseStrategy]:
-        """Retrieve a strategy class by slug. Raises KeyError if not found."""
         if slug not in cls._registry:
             raise KeyError(
                 f"Strategy '{slug}' is not registered. "
@@ -56,7 +32,6 @@ class StrategyRegistry:
 
     @classmethod
     def get_all(cls) -> Dict[str, Type[BaseStrategy]]:
-        """Return all registered strategies."""
         return dict(cls._registry)
 
     @classmethod
@@ -70,9 +45,9 @@ class StrategyRegistry:
     @classmethod
     def auto_discover(cls):
         """
-        Import all strategy plugin modules so their @register
-        decorators fire and populate the registry.
-        Called once from StrategiesConfig.ready().
+        Import all plugin modules using relative-style dotted paths.
+        Each module's @StrategyRegistry.register decorator fires on import.
+        Errors are printed in full so misconfigured plugins are visible.
         """
         plugin_modules = [
             'apps.strategies.plugins.ma_crossover',
@@ -84,17 +59,21 @@ class StrategyRegistry:
             try:
                 importlib.import_module(module_path)
                 logger.info(f"Strategy plugin loaded: {module_path}")
-            except ImportError as e:
-                logger.error(f"Failed to load strategy plugin {module_path}: {e}")
+            except Exception:
+                # Print the FULL traceback so plugin errors are visible
+                logger.error(
+                    f"FAILED to load strategy plugin '{module_path}':\n"
+                    + traceback.format_exc()
+                )
 
     @classmethod
     def get_schema_list(cls) -> list:
-        """
-        Return a list of dicts describing all registered strategies.
-        Used by the API to populate the strategy selection UI.
-        """
         result = []
         for slug, strategy_cls in cls._registry.items():
+            try:
+                inst = strategy_cls()
+            except Exception:
+                inst = None
             result.append({
                 'slug':               slug,
                 'name':               strategy_cls.name,
@@ -102,9 +81,6 @@ class StrategyRegistry:
                 'description':        strategy_cls.description,
                 'default_parameters': strategy_cls.get_default_parameters(),
                 'parameter_schema':   strategy_cls.get_parameter_schema(),
-                'required_candles':   strategy_cls().get_required_candles(),
+                'required_candles':   inst.get_required_candles() if inst else 0,
             })
         return result
-
-    def __repr__(self):
-        return f"<StrategyRegistry strategies={self.list_slugs()}>"
