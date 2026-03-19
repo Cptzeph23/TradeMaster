@@ -7,6 +7,14 @@ bot
 test_apis.sh
 test_strategies.sh
 test_webhooks.sh
+test_market_data.sh
+test_broker_api.sh
+test_signal_generation.sh
+test_execution.sh
+test_risk_management.sh
+test_portfolio_management.sh
+test_reporting.sh
+test_utils.sh   
 
 .idea/
 *.iml
