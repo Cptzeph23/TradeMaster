@@ -1,0 +1,25 @@
+{% extends "base/base.html" %}
+{% load trading_filters %}
+{% block title %}Backtesting{% endblock %}
+{% block nav_backtest %}active{% endblock %}
+{% block page_title %}Backtesting{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Backtesting</h1></div>
+<div class="card" style="max-width:600px">
+  <div class="card-header"><span class="card-title">Quick Actions</span></div>
+  <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">
+    Use the NLP command bar at the top to interact, or use the API directly.
+  </p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="/api/docs/" target="_blank" class="btn btn-primary">API Docs →</a>
+    <a href="/dashboard/" class="btn btn-ghost">← Dashboard</a>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function guardAuth() {
+  if (!localStorage.getItem('access_token')) window.location.href = '/accounts/login/';
+})();
+</script>
+{% endblock %}
