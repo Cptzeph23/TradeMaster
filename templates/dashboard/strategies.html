@@ -1,0 +1,132 @@
+{% extends "base/base.html" %}
+{% load trading_filters %}
+{% block title %}Strategies{% endblock %}
+{% block nav_strategies %}active{% endblock %}
+{% block page_title %}Strategies{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Trading Strategies</h1>
+  <button class="btn btn-primary" onclick="document.getElementById('createModal').classList.add('open')">
+    + New Strategy
+  </button>
+</div>
+
+<div class="mb-24">
+  <h2 style="font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">My Strategies</h2>
+  <div id="myStrategies" style="color:var(--text-muted)">Loading…</div>
+</div>
+
+<!-- Create Strategy Modal -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <div class="modal-title">New Strategy</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" id="sName" class="form-input" placeholder="e.g. EUR/USD Golden Cross"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Strategy Type</label>
+      <select id="sType" class="form-select" onchange="loadDefaults()">
+        <option value="ma_crossover">Moving Average Crossover</option>
+        <option value="rsi_reversal">RSI Reversal</option>
+        <option value="breakout">Donchian Breakout</option>
+        <option value="mean_reversion">Bollinger Mean Reversion</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Symbols (comma separated)</label>
+      <input type="text" id="sSymbols" class="form-input" placeholder="EUR_USD"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Timeframe</label>
+      <select id="sTimeframe" class="form-select">
+        <option>M15</option><option>M30</option>
+        <option selected>H1</option><option>H4</option><option>D1</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Parameters (JSON)</label>
+      <textarea id="sParams" class="form-input" rows="4"
+        style="font-family:var(--font-mono);font-size:12px;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-primary" onclick="createStrategy()" style="flex:1">Create</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('createModal').classList.remove('open')">Cancel</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function guardAuth() {
+  if (!localStorage.getItem('access_token')) window.location.href = '/accounts/login/';
+})();
+
+const DEFAULTS = {
+  ma_crossover:  {fast_period:50,slow_period:200,ma_type:'EMA',atr_sl_mult:1.5,atr_tp_mult:3.0,rsi_filter:true},
+  rsi_reversal:  {rsi_period:14,oversold:30,overbought:70,trend_filter:true},
+  breakout:      {channel_period:20,adx_filter:true,adx_threshold:25,volume_filter:false},
+  mean_reversion:{bb_period:20,bb_std:2.0,rsi_confirm:true,adx_filter:true},
+};
+
+function loadDefaults() {
+  const type = document.getElementById('sType').value;
+  document.getElementById('sParams').value = JSON.stringify(DEFAULTS[type]||{}, null, 2);
+}
+
+async function loadStrategies() {
+  const data = await API.getStrategies();
+  const own  = data.own || [];
+  const cont = document.getElementById('myStrategies');
+
+  if (!own.length) {
+    cont.innerHTML = `<div style="border:1px dashed var(--border);border-radius:var(--radius-md);
+      padding:30px;text-align:center;color:var(--text-muted)">No strategies yet.</div>`;
+    return;
+  }
+
+  cont.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Type</th><th>Timeframe</th><th>Win Rate</th><th>Profit Factor</th><th>Backtests</th><th></th></tr></thead>
+    <tbody>${own.map(s => `<tr>
+      <td>${s.name}</td>
+      <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--accent)">${s.strategy_type}</span></td>
+      <td>${s.timeframe}</td>
+      <td>${s.win_rate!=null?s.win_rate.toFixed(1)+'%':'—'}</td>
+      <td>${s.profit_factor!=null?s.profit_factor.toFixed(2):'—'}</td>
+      <td>${s.backtest_count||0}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteStrategy('${s.id}')">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+async function createStrategy() {
+  let params = {};
+  try { params = JSON.parse(document.getElementById('sParams').value); }
+  catch(e) { UI.toast('Invalid JSON in parameters','error'); return; }
+
+  const res = await API.createStrategy({
+    name:          document.getElementById('sName').value.trim(),
+    strategy_type: document.getElementById('sType').value,
+    symbols:       document.getElementById('sSymbols').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean),
+    timeframe:     document.getElementById('sTimeframe').value,
+    parameters:    params,
+  });
+  if (res?.success) {
+    UI.toast('Strategy created','success');
+    document.getElementById('createModal').classList.remove('open');
+    loadStrategies();
+  } else UI.toast(res?.message||'Failed','error');
+}
+
+async function deleteStrategy(id) {
+  if (!confirm('Delete this strategy?')) return;
+  const res = await API.deleteStrategy(id);
+  if (res?.success) { UI.toast('Deleted','success'); loadStrategies(); }
+  else UI.toast(res?.message||'Failed','error');
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadStrategies(); loadDefaults(); });
+</script>
+{% endblock %}
