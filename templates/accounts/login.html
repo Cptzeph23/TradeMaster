@@ -1,5 +1,8 @@
 <!-- ============================================================
-     Login page
+     FIX: After successful JWT login, redirect JS-side to /dashboard/
+     The previous version relied on @login_required session auth
+     which never gets set by JWT. Now the redirect is purely
+     client-side after storing the JWT token.
      ============================================================ -->
 <!DOCTYPE html>
 <html lang="en">
@@ -67,9 +70,9 @@
       <h1>ForexBot</h1>
       <p>Automated Trading Platform</p>
     </div>
- 
+
     <div class="auth-error" id="loginError"></div>
- 
+
     <form id="loginForm" onsubmit="handleLogin(event)">
       <div class="form-group">
         <label class="form-label">Email Address</label>
@@ -89,13 +92,13 @@
         Sign In
       </button>
     </form>
- 
+
     <div class="auth-footer">
       Don't have an account? <a href="/accounts/register/">Register</a>
     </div>
   </div>
 </div>
- 
+
 <script src="/static/js/api.js"></script>
 <script>
   // If already logged in (token exists and not expired), skip to dashboard
@@ -113,22 +116,22 @@
       } catch(e) { /* token malformed — stay on login */ }
     }
   })();
- 
+
   async function handleLogin(e) {
     e.preventDefault();
- 
+
     const btn   = document.getElementById('loginBtn');
     const error = document.getElementById('loginError');
     const email = document.getElementById('email').value.trim();
     const pass  = document.getElementById('password').value;
- 
+
     btn.innerHTML = '<span class="spinner"></span>Signing in…';
     btn.disabled  = true;
     error.style.display = 'none';
- 
+
     try {
       const res = await API.login(email, pass);
- 
+
       if (res && res.success) {
         // JWT stored in localStorage by API.login()
         // Now redirect — no session cookie needed
@@ -152,4 +155,3 @@
 </script>
 </body>
 </html>
- 

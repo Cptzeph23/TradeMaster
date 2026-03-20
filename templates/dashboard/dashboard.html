@@ -2,22 +2,24 @@
      Main dashboard page
      ============================================================ -->
 {% extends "base/base.html" %}
+{% load trading_filters %}
+ 
 {% block title %}Dashboard{% endblock %}
 {% block nav_dashboard %}active{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
-
+ 
 {% block content %}
 <!-- Live price strip -->
 <div class="price-strip" id="priceStrip">
   {% for pair in major_pairs %}
   <div class="price-item" id="price_{{ pair }}">
-    <div class="price-symbol">{{ pair|replace:"_","/" }}</div>
-    <div class="price-bid price-up">—</div>
+    <div class="price-symbol">{{ pair|replace:"_,/" }}</div>
+    <div class="price-bid price-up" data-prev-bid="0">—</div>
     <div class="price-spread">Spread: —</div>
   </div>
   {% endfor %}
 </div>
-
+ 
 <!-- Summary stats -->
 <div class="stats-grid mb-24">
   <div class="stat-card">
@@ -37,7 +39,7 @@
     <div class="stat-value" id="statTotal">—</div>
   </div>
 </div>
-
+ 
 <!-- Bot cards + equity chart -->
 <div class="grid-2 mb-24">
   <div>
@@ -49,7 +51,7 @@
       <div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading bots…</div>
     </div>
   </div>
-
+ 
   <div class="card">
     <div class="card-header">
       <span class="card-title">Portfolio Equity</span>
@@ -64,28 +66,27 @@
     </div>
   </div>
 </div>
-
+ 
 <!-- Recent trades + Bot logs -->
 <div class="grid-2">
   <div class="card">
     <div class="card-header">
       <span class="card-title">Recent Trades</span>
-      <a href="/trades/" style="font-size:12px;color:var(--accent)">View all</a>
     </div>
     <div class="table-wrap">
-      <table id="recentTradesTable">
+      <table>
         <thead>
           <tr>
             <th>Symbol</th><th>Type</th><th>P&L</th><th>Status</th><th>Time</th>
           </tr>
         </thead>
         <tbody id="recentTradesTbody">
-          <tr><td colspan="5" style="color:var(--text-muted);text-align:center">No trades yet</td></tr>
+          <tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:20px">No trades yet</td></tr>
         </tbody>
       </table>
     </div>
   </div>
-
+ 
   <div class="card">
     <div class="card-header">
       <span class="card-title">Live Bot Logs</span>
@@ -98,102 +99,109 @@
     </div>
   </div>
 </div>
-
+ 
 <!-- NLP Result box -->
-<div id="nlpResultBox" class="nlp-result hidden" style="margin-top:16px"></div>
+<div id="nlpResultBox" class="nlp-result" style="display:none;margin-top:16px"></div>
 {% endblock %}
-
+ 
 {% block extra_scripts %}
 <script>
-let equityChart = null;
-const activeBotIds = [];
-
+// ── Auth guard (JWT check before loading anything) ───────────
 (function guardAuth() {
   const token = localStorage.getItem('access_token');
   if (!token) {
-    window.location.href = '/accounts/login/?next=' + encodeURIComponent(window.location.pathname);
+    window.location.href = '/accounts/login/?next=/dashboard/';
     return;
   }
-  // Check token not expired
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    const now     = Math.floor(Date.now() / 1000);
-    if (payload.exp <= now) {
-      // Try to refresh
+    if (payload.exp <= Math.floor(Date.now() / 1000)) {
       const refresh = localStorage.getItem('refresh_token');
-      if (!refresh) {
-        window.location.href = '/accounts/login/?next=' + encodeURIComponent(window.location.pathname);
-        return;
-      }
-      // Async refresh — if it fails, login page handles it
+      if (!refresh) { window.location.href = '/accounts/login/'; return; }
       fetch('/api/v1/auth/token/refresh/', {
-        method:  'POST',
+        method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify({ refresh }),
+        body: JSON.stringify({ refresh }),
       })
       .then(r => r.json())
       .then(d => {
         if (d.access) {
           localStorage.setItem('access_token', d.access);
           if (d.refresh) localStorage.setItem('refresh_token', d.refresh);
-        } else {
-          window.location.href = '/accounts/login/';
-        }
+        } else { window.location.href = '/accounts/login/'; }
       })
       .catch(() => { window.location.href = '/accounts/login/'; });
     }
-  } catch(e) {
-    localStorage.removeItem('access_token');
-    window.location.href = '/accounts/login/';
-  }
+  } catch(e) { window.location.href = '/accounts/login/'; }
 })();
-
-
-
+ 
+let equityChart = null;
+ 
 async function loadDashboard() {
   try {
     const data = await API.getBots();
-    renderBots(data.bots || []);
+    const bots = data.bots || [];
+    renderBots(bots);
     updateStats(data);
-
-    // Start dashboard WebSocket
+ 
+    // WebSocket dashboard feed
     WS.connectDashboard(onDashboardUpdate);
-
-    // Subscribe to prices for major pairs
+ 
+    // Price feeds for major pairs
     ['EUR_USD','GBP_USD','USD_JPY','AUD_USD'].forEach(sym => {
-      WS.connectPrices(sym, data => updatePriceStrip(sym, data));
+      WS.connectPrices(sym, tick => updatePriceStrip(sym, tick));
     });
-
+ 
+    // Bot-specific WS for log streaming
+    bots.filter(b => b.status === 'running').forEach(bot => {
+      WS.connectBot(bot.id, {
+        onLog:    entry => addLogEntry(entry),
+        onSignal: sig  => addLogEntry({
+          level: 'signal', event_type: 'signal',
+          message: `${sig.action?.toUpperCase()} ${sig.symbol} — ${sig.reason || ''}`,
+        }),
+      });
+    });
+ 
   } catch(e) {
     console.error('Dashboard load failed:', e);
+    if (e.message && e.message.includes('401')) {
+      window.location.href = '/accounts/login/';
+    }
   }
 }
-
+ 
 function renderBots(bots) {
   const grid = document.getElementById('botsGrid');
   const sel  = document.getElementById('equityBotSelect');
-
+ 
   if (!bots.length) {
     grid.innerHTML = `
-      <div style="color:var(--text-muted);font-size:13px;padding:20px 0;text-align:center">
-        No bots yet. <a href="/bots/new/">Create your first bot →</a>
+      <div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center;
+                  border:1px dashed var(--border);border-radius:var(--radius-md)">
+        No bots yet.<br><br>
+        <a href="/bots/" class="btn btn-primary btn-sm">Create your first bot →</a>
       </div>`;
     return;
   }
-
-  grid.innerHTML = bots.map(bot => `
+ 
+  grid.innerHTML = bots.map(bot => {
+    const pnl     = parseFloat(bot.total_profit_loss || 0);
+    const pnlCls  = pnl >= 0 ? 'positive' : 'negative';
+    const pnlSign = pnl >= 0 ? '+' : '';
+    return `
     <div class="bot-card" onclick="location.href='/bots/${bot.id}/'">
       <div class="bot-card-header">
         <div>
           <div class="bot-name">${bot.name}</div>
           <div class="bot-strategy">${bot.strategy_name || '—'}</div>
         </div>
-        ${UI.statusBadge(bot.status)}
+        <span class="badge badge-${bot.status}">${bot.status}</span>
       </div>
       <div class="bot-stats">
         <div>
           <div class="bot-stat-label">P&L</div>
-          <div class="bot-stat-value">${UI.formatPnl(bot.total_profit_loss).replace(/<[^>]*>/g,'')}</div>
+          <div class="bot-stat-value ${pnlCls}">${pnlSign}${pnl.toFixed(2)}</div>
         </div>
         <div>
           <div class="bot-stat-label">Win Rate</div>
@@ -208,76 +216,71 @@ function renderBots(bots) {
         ${bot.status === 'running'
           ? `<button class="btn btn-warning btn-sm" onclick="controlBot('${bot.id}','pause')">⏸ Pause</button>
              <button class="btn btn-danger  btn-sm" onclick="controlBot('${bot.id}','stop')">⏹ Stop</button>`
-          : `<button class="btn btn-success btn-sm" onclick="controlBot('${bot.id}','start')">▶ Start</button>`
-        }
+          : `<button class="btn btn-success btn-sm" onclick="controlBot('${bot.id}','start')">▶ Start</button>`}
+        <button class="btn btn-ghost btn-sm"
+                onclick="location.href='/bots/${bot.id}/'">Details</button>
       </div>
-    </div>
-  `).join('');
-
-  // Populate equity select
+    </div>`;
+  }).join('');
+ 
   sel.innerHTML = '<option value="">Select bot…</option>' +
     bots.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
 }
-
+ 
 async function controlBot(id, action) {
-  const actions = { start: API.startBot, stop: API.stopBot, pause: API.pauseBot, resume: API.resumeBot };
+  const fns = { start: API.startBot, stop: API.stopBot, pause: API.pauseBot, resume: API.resumeBot };
   try {
-    const res = await actions[action](id);
-    if (res?.success) {
-      UI.toast(`Bot ${action}ed`, 'success');
-      loadDashboard();
-    } else {
-      UI.toast(res?.message || 'Action failed', 'error');
-    }
+    const res = await fns[action](id);
+    if (res?.success) { UI.toast(`Bot ${action}ed`, 'success'); loadDashboard(); }
+    else UI.toast(res?.message || 'Action failed', 'error');
   } catch(e) { UI.toast(e.message, 'error'); }
 }
-
+ 
 async function loadEquityCurve(botId) {
   if (!botId) return;
   try {
-    const data = await API.getPerformance(botId);
+    const data  = await API.getPerformance(botId);
     const curve = data.equity_curve || [];
-    const labels = curve.map((_, i) => i);
-    const values = curve.map(v => typeof v === 'object' ? v.equity : v);
-
+    const vals  = curve.map(v => typeof v === 'object' ? v.equity : v);
+    const lbls  = curve.map((_, i) => i);
     if (equityChart) equityChart.destroy();
-    equityChart = Charts.equity('equityChart', labels, values);
+    equityChart = Charts.equity('equityChart', lbls, vals);
   } catch(e) { console.error('Equity load failed:', e); }
 }
-
+ 
 function updateStats(data) {
-  const summary = data.summary || {};
-  document.getElementById('statRunning').textContent = summary.running_bots ?? '—';
-  document.getElementById('statPnl').innerHTML       = UI.formatPnl(summary.total_pnl || 0);
-  document.getElementById('statOpen').textContent   = '—';
-  document.getElementById('statTotal').textContent  = summary.total_trades ?? '—';
+  const s = data.summary || {};
+  document.getElementById('statRunning').textContent = s.running_bots ?? '—';
+  document.getElementById('statTotal').textContent   = s.total_trades  ?? '—';
+  const pnl = parseFloat(s.total_pnl || 0);
+  const el  = document.getElementById('statPnl');
+  el.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+  el.className   = 'stat-value ' + (pnl >= 0 ? 'positive' : 'negative');
 }
-
+ 
 function onDashboardUpdate(data) {
   if (data.bots)    renderBots(data.bots);
   if (data.summary) updateStats({ summary: data.summary });
 }
-
+ 
 function addLogEntry(entry) {
   const viewer = document.getElementById('logViewer');
   if (!viewer) return;
-  const el = document.createElement('div');
-  el.className = `log-entry level-${entry.level || 'info'}`;
+  const el   = document.createElement('div');
   const time = entry.timestamp
     ? new Date(entry.timestamp).toLocaleTimeString()
     : new Date().toLocaleTimeString();
+  el.className = `log-entry level-${entry.level || 'info'}`;
   el.innerHTML = `<span class="log-time">${time}</span> [${(entry.event_type||'').toUpperCase()}] ${entry.message || ''}`;
   viewer.prepend(el);
-  // Keep only last 100 entries
   while (viewer.children.length > 100) viewer.lastChild.remove();
 }
-
+ 
 function clearLogs() {
   const v = document.getElementById('logViewer');
   if (v) v.innerHTML = '';
 }
-
-// Load recent trades
+ 
 async function loadRecentTrades() {
   try {
     const bots = await API.getBots();
@@ -286,24 +289,31 @@ async function loadRecentTrades() {
       const td = await API.getBotTrades(bot.id);
       allTrades.push(...(td.trades || []).slice(0, 5));
     }
-    allTrades.sort((a,b) => new Date(b.opened_at) - new Date(a.opened_at));
+    allTrades.sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at));
     const tbody = document.getElementById('recentTradesTbody');
     if (!allTrades.length) return;
-    tbody.innerHTML = allTrades.slice(0,10).map(t => `
-      <tr>
+    tbody.innerHTML = allTrades.slice(0, 10).map(t => {
+      const pnl  = parseFloat(t.profit_loss || 0);
+      const sign = pnl >= 0 ? '+' : '';
+      const cls  = pnl >= 0 ? 'positive' : 'negative';
+      const time = t.opened_at ? new Date(t.opened_at).toLocaleString([], {
+        month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
+      }) : '—';
+      return `<tr>
         <td class="mono">${t.symbol}</td>
-        <td><span class="${t.order_type==='buy'?'positive':'negative'}">${t.order_type.toUpperCase()}</span></td>
-        <td class="mono">${UI.formatPnl(t.profit_loss)}</td>
-        <td>${UI.statusBadge(t.status)}</td>
-        <td style="color:var(--text-muted)">${UI.formatDate(t.opened_at)}</td>
-      </tr>
-    `).join('');
+        <td><span class="${t.order_type==='buy'?'positive':'negative'}">${(t.order_type||'').toUpperCase()}</span></td>
+        <td class="mono ${cls}">${sign}${pnl.toFixed(2)}</td>
+        <td><span class="badge badge-${t.status}">${t.status}</span></td>
+        <td style="color:var(--text-muted);font-size:12px">${time}</td>
+      </tr>`;
+    }).join('');
   } catch(e) { console.error('Trades load failed:', e); }
 }
-
+ 
 document.addEventListener('DOMContentLoaded', () => {
   loadDashboard();
   loadRecentTrades();
 });
 </script>
 {% endblock %}
+ 
