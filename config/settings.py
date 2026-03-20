@@ -7,6 +7,72 @@ from pathlib import Path
 from datetime import timedelta
 import environ
 
+# ── Determine environment ─────────────────────────────────────
+IS_PRODUCTION = (
+    not DEBUG and
+    not any(h in ['localhost', '127.0.0.1', 'testserver']
+            for h in ALLOWED_HOSTS)
+)
+ 
+# ── Security headers (production only) ────────────────────────
+if IS_PRODUCTION:
+    SECURE_SSL_REDIRECT             = True
+    SECURE_HSTS_SECONDS             = 31536000      # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
+    SECURE_HSTS_PRELOAD             = True
+    SECURE_BROWSER_XSS_FILTER       = True
+    SECURE_CONTENT_TYPE_NOSNIFF     = True
+    X_FRAME_OPTIONS                 = 'DENY'
+    SESSION_COOKIE_SECURE           = True
+    CSRF_COOKIE_SECURE              = True
+    SECURE_REFERRER_POLICY          = 'strict-origin-when-cross-origin'
+else:
+    # Development — no HTTPS forcing
+    SECURE_SSL_REDIRECT             = False
+    SESSION_COOKIE_SECURE           = False
+    CSRF_COOKIE_SECURE              = False
+ 
+# ── Content Security Policy ───────────────────────────────────
+CSP_DEFAULT_SRC     = ("'self'",)
+CSP_SCRIPT_SRC      = ("'self'", "'unsafe-inline'",
+                        "https://cdn.jsdelivr.net",
+                        "https://fonts.googleapis.com")
+CSP_STYLE_SRC       = ("'self'", "'unsafe-inline'",
+                        "https://fonts.googleapis.com")
+CSP_FONT_SRC        = ("'self'", "https://fonts.gstatic.com")
+CSP_IMG_SRC         = ("'self'", "data:")
+CSP_CONNECT_SRC     = ("'self'", "ws:", "wss:")
+CSP_FRAME_ANCESTORS = ("'none'",)
+ 
+# ── Session security ──────────────────────────────────────────
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_ENGINE          = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS     = 'default'
+SESSION_COOKIE_AGE      = 86400          # 24 hours
+ 
+# ── CSRF ──────────────────────────────────────────────────────
+CSRF_COOKIE_HTTPONLY    = False          # JS needs to read it
+CSRF_COOKIE_SAMESITE    = 'Lax'
+CSRF_TRUSTED_ORIGINS    = env.list(
+    'CSRF_TRUSTED_ORIGINS',
+    default=['http://localhost:8001', 'http://127.0.0.1:8001']
+)
+ 
+# ── Rate limiting (django-ratelimit) ──────────────────────────
+RATELIMIT_ENABLE    = True
+RATELIMIT_USE_CACHE = 'default'
+RATELIMIT_FAIL_OPEN = False             # Block on cache failure
+ 
+# ── File upload security ──────────────────────────────────────
+DATA_UPLOAD_MAX_MEMORY_SIZE     = 5 * 1024 * 1024   # 5 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE     = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_NUMBER_FIELDS   = 100
+ 
+# ── Admin security ────────────────────────────────────────────
+ADMIN_URL = env('ADMIN_URL', default='admin/')   # change in .env for production
+ 
+
 # ── Base Directory ───────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
