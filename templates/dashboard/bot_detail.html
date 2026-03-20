@@ -1,0 +1,212 @@
+{% extends "base/base.html" %}
+{% load trading_filters %}
+{% block title %}Bot Detail{% endblock %}
+{% block nav_bots %}active{% endblock %}
+{% block page_title %}Bot Detail{% endblock %}
+
+{% block content %}
+<div id="botHeader" style="margin-bottom:24px">
+  <div class="flex-between">
+    <div>
+      <a href="/bots/" style="color:var(--text-muted);font-size:13px">← Back to Bots</a>
+      <h1 id="botName" style="font-size:20px;font-weight:700;margin-top:6px">Loading…</h1>
+      <div id="botSubtitle" style="color:var(--text-muted);font-size:13px;margin-top:2px"></div>
+    </div>
+    <div style="display:flex;gap:8px" id="botControls"></div>
+  </div>
+</div>
+
+<div class="stats-grid mb-24">
+  <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" id="dStatus">—</div></div>
+  <div class="stat-card"><div class="stat-label">Total P&L</div><div class="stat-value" id="dPnl">—</div></div>
+  <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="dWinRate">—</div></div>
+  <div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value" id="dTrades">—</div></div>
+  <div class="stat-card"><div class="stat-label">Drawdown</div><div class="stat-value" id="dDrawdown">—</div></div>
+  <div class="stat-card"><div class="stat-label">Open Trades</div><div class="stat-value" id="dOpen">—</div></div>
+</div>
+
+<div class="grid-2 mb-24">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Equity Curve</span></div>
+    <div class="chart-container"><canvas id="equityChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Risk Settings</span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleRiskEdit()">Edit</button>
+    </div>
+    <div id="riskDisplay"></div>
+    <div id="riskEditForm" style="display:none">
+      <div class="form-group"><label class="form-label">Risk %</label>
+        <input type="number" id="rRisk" class="form-input" step="0.1" min="0.1" max="10"/></div>
+      <div class="form-group"><label class="form-label">Stop Loss (pips)</label>
+        <input type="number" id="rSL" class="form-input"/></div>
+      <div class="form-group"><label class="form-label">Take Profit (pips)</label>
+        <input type="number" id="rTP" class="form-input"/></div>
+      <div class="form-group"><label class="form-label">Max Trades/Day</label>
+        <input type="number" id="rMaxTrades" class="form-input"/></div>
+      <div class="form-group"><label class="form-label">Max Drawdown %</label>
+        <input type="number" id="rMaxDD" class="form-input"/></div>
+      <button class="btn btn-primary" onclick="saveRisk()">Save Risk Rules</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Trade History</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="tradesTbody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">No trades</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Bot Logs</span>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('logViewer').innerHTML=''">Clear</button>
+    </div>
+    <div class="log-viewer" id="logViewer"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const BOT_ID = '{{ bot_id }}';
+window.ACTIVE_BOT_ID = BOT_ID;
+let equityChart = null;
+
+(function guardAuth() {
+  if (!localStorage.getItem('access_token')) window.location.href = '/accounts/login/';
+})();
+
+async function loadBot() {
+  try {
+    const data = await API.getBot(BOT_ID);
+    const bot  = data.bot || {};
+
+    document.getElementById('botName').textContent     = bot.name || '—';
+    document.getElementById('botSubtitle').textContent =
+      `${bot.strategy_name||'—'} · ${(bot.symbols||[]).join(', ')||'—'} · ${bot.timeframe||'—'}`;
+
+    const pnl  = parseFloat(bot.total_profit_loss || 0);
+    const pCls = pnl >= 0 ? 'positive' : 'negative';
+
+    document.getElementById('dStatus').innerHTML   = `<span class="badge badge-${bot.status}">${bot.status}</span>`;
+    document.getElementById('dPnl').innerHTML      = `<span class="${pCls}">${pnl>=0?'+':''}${pnl.toFixed(2)}</span>`;
+    document.getElementById('dWinRate').textContent = `${parseFloat(bot.win_rate||0).toFixed(1)}%`;
+    document.getElementById('dTrades').textContent  = bot.total_trades || 0;
+    document.getElementById('dDrawdown').textContent= `${parseFloat(bot.current_drawdown||0).toFixed(2)}%`;
+    document.getElementById('dOpen').textContent    = (bot.open_trades||0);
+
+    // Controls
+    const ctrl = document.getElementById('botControls');
+    ctrl.innerHTML = bot.status === 'running'
+      ? `<button class="btn btn-warning" onclick="ctrl('pause')">⏸ Pause</button>
+         <button class="btn btn-danger"  onclick="ctrl('stop')">⏹ Stop</button>`
+      : `<button class="btn btn-success" onclick="ctrl('start')">▶ Start</button>`;
+
+    // Risk display
+    const rs = bot.risk_settings || {};
+    document.getElementById('riskDisplay').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+        ${Object.entries({
+          'Risk %':rs.risk_percent||1, 'SL Pips':rs.stop_loss_pips||50,
+          'TP Pips':rs.take_profit_pips||100, 'Max Trades/Day':rs.max_trades_per_day||10,
+          'Max Open':rs.max_open_trades||3, 'Max DD%':rs.max_drawdown_percent||20
+        }).map(([k,v])=>`<div><div class="stat-label">${k}</div><div style="font-family:var(--font-mono)">${v}</div></div>`).join('')}
+      </div>`;
+
+    // Populate risk edit form
+    document.getElementById('rRisk').value     = rs.risk_percent     || 1;
+    document.getElementById('rSL').value       = rs.stop_loss_pips   || 50;
+    document.getElementById('rTP').value       = rs.take_profit_pips || 100;
+    document.getElementById('rMaxTrades').value= rs.max_trades_per_day || 10;
+    document.getElementById('rMaxDD').value    = rs.max_drawdown_percent || 20;
+
+    // Connect bot WebSocket
+    WS.connectBot(BOT_ID, {
+      onStatus: d => { /* live status update */ },
+      onLog:    entry => addLog(entry),
+      onSignal: sig => addLog({level:'signal',event_type:'signal',
+        message:`${sig.action?.toUpperCase()} ${sig.symbol} — ${sig.reason||''}`,
+        timestamp:new Date().toISOString()}),
+      onTradeOpen:  d => { UI.toast(`Trade opened: ${d.symbol}`,'info'); loadTrades(); },
+      onTradeClosed:d => { UI.toast(`Trade closed: ${d.symbol} PnL=${d.pnl?.toFixed(2)}`,'success'); loadTrades(); },
+    });
+
+  } catch(e) { UI.toast(e.message,'error'); }
+}
+
+async function ctrl(action) {
+  const fns = {start:API.startBot,stop:API.stopBot,pause:API.pauseBot,resume:API.resumeBot};
+  const res = await fns[action](BOT_ID);
+  if (res?.success) { UI.toast(`Bot ${action}ed`,'success'); loadBot(); }
+  else UI.toast(res?.message||'Failed','error');
+}
+
+async function loadTrades() {
+  const data   = await API.getBotTrades(BOT_ID);
+  const trades = data.trades || [];
+  const tbody  = document.getElementById('tradesTbody');
+  if (!trades.length) return;
+  tbody.innerHTML = trades.slice(0,20).map(t => {
+    const pnl = parseFloat(t.profit_loss||0);
+    return `<tr>
+      <td class="mono">${t.symbol}</td>
+      <td class="${t.order_type==='buy'?'positive':'negative'}">${(t.order_type||'').toUpperCase()}</td>
+      <td class="mono">${parseFloat(t.entry_price||0).toFixed(5)}</td>
+      <td class="mono">${t.exit_price?parseFloat(t.exit_price).toFixed(5):'—'}</td>
+      <td class="mono ${pnl>=0?'positive':'negative'}">${pnl>=0?'+':''}${pnl.toFixed(2)}</td>
+      <td><span class="badge badge-${t.status}">${t.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadPerformance() {
+  try {
+    const data  = await API.getPerformance(BOT_ID);
+    const curve = data.equity_curve || [];
+    if (!curve.length) return;
+    const vals = curve.map(v => typeof v === 'object' ? v.equity : v);
+    const lbls = curve.map((_, i) => i);
+    if (equityChart) equityChart.destroy();
+    equityChart = Charts.equity('equityChart', lbls, vals);
+  } catch(e) {}
+}
+
+function toggleRiskEdit() {
+  const form = document.getElementById('riskEditForm');
+  const disp = document.getElementById('riskDisplay');
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  disp.style.display = show ? 'none' : 'block';
+}
+
+async function saveRisk() {
+  const res = await API.updateRiskRules(BOT_ID, {
+    risk_percent:        parseFloat(document.getElementById('rRisk').value),
+    stop_loss_pips:      parseFloat(document.getElementById('rSL').value),
+    take_profit_pips:    parseFloat(document.getElementById('rTP').value),
+    max_trades_per_day:  parseInt(document.getElementById('rMaxTrades').value),
+    max_drawdown_percent:parseFloat(document.getElementById('rMaxDD').value),
+  });
+  if (res?.success) { UI.toast('Risk rules saved','success'); toggleRiskEdit(); loadBot(); }
+  else UI.toast(res?.message||'Save failed','error');
+}
+
+function addLog(entry) {
+  const v = document.getElementById('logViewer');
+  const el = document.createElement('div');
+  el.className = `log-entry level-${entry.level||'info'}`;
+  const t = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+  el.innerHTML = `<span class="log-time">${t}</span> [${(entry.event_type||'').toUpperCase()}] ${entry.message||''}`;
+  v.prepend(el);
+  while (v.children.length > 100) v.lastChild.remove();
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadBot(); loadTrades(); loadPerformance(); });
+</script>
+{% endblock %}
