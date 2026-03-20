@@ -7,31 +7,16 @@ from pathlib import Path
 from datetime import timedelta
 import environ
 
-# ── Determine environment ─────────────────────────────────────
-IS_PRODUCTION = (
-    not DEBUG and
-    not any(h in ['localhost', '127.0.0.1', 'testserver']
-            for h in ALLOWED_HOSTS)
+# ── Base Directory ───────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ── Load Environment Variables ───────────────────────────────
+env = environ.Env(
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
 )
- 
-# ── Security headers (production only) ────────────────────────
-if IS_PRODUCTION:
-    SECURE_SSL_REDIRECT             = True
-    SECURE_HSTS_SECONDS             = 31536000      # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
-    SECURE_HSTS_PRELOAD             = True
-    SECURE_BROWSER_XSS_FILTER       = True
-    SECURE_CONTENT_TYPE_NOSNIFF     = True
-    X_FRAME_OPTIONS                 = 'DENY'
-    SESSION_COOKIE_SECURE           = True
-    CSRF_COOKIE_SECURE              = True
-    SECURE_REFERRER_POLICY          = 'strict-origin-when-cross-origin'
-else:
-    # Development — no HTTPS forcing
-    SECURE_SSL_REDIRECT             = False
-    SESSION_COOKIE_SECURE           = False
-    CSRF_COOKIE_SECURE              = False
- 
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
 # ── Content Security Policy ───────────────────────────────────
 CSP_DEFAULT_SRC     = ("'self'",)
 CSP_SCRIPT_SRC      = ("'self'", "'unsafe-inline'",
@@ -68,25 +53,39 @@ RATELIMIT_FAIL_OPEN = False             # Block on cache failure
 DATA_UPLOAD_MAX_MEMORY_SIZE     = 5 * 1024 * 1024   # 5 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE     = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_NUMBER_FIELDS   = 100
- 
+
 # ── Admin security ────────────────────────────────────────────
 ADMIN_URL = env('ADMIN_URL', default='admin/')   # change in .env for production
- 
-
-# ── Base Directory ───────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# ── Load Environment Variables ───────────────────────────────
-env = environ.Env(
-    DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
-)
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # ── Core Settings ────────────────────────────────────────────
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env('DJANGO_DEBUG', default=False)
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '127.0.0.1:8001', 'localhost:8001'])
+
+# ── Determine environment ─────────────────────────────────────
+IS_PRODUCTION = (
+    not DEBUG and
+    not any(h in ['localhost', '127.0.0.1', 'testserver']
+            for h in ALLOWED_HOSTS)
+)
+
+# ── Security headers (production only) ────────────────────────
+if IS_PRODUCTION:
+    SECURE_SSL_REDIRECT             = True
+    SECURE_HSTS_SECONDS             = 31536000      # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
+    SECURE_HSTS_PRELOAD             = True
+    SECURE_BROWSER_XSS_FILTER       = True
+    SECURE_CONTENT_TYPE_NOSNIFF     = True
+    X_FRAME_OPTIONS                 = 'DENY'
+    SESSION_COOKIE_SECURE           = True
+    CSRF_COOKIE_SECURE              = True
+    SECURE_REFERRER_POLICY          = 'strict-origin-when-cross-origin'
+else:
+    # Development — no HTTPS forcing
+    SECURE_SSL_REDIRECT             = False
+    SESSION_COOKIE_SECURE           = False
+    CSRF_COOKIE_SECURE              = False
 
 # ── Application Definition ───────────────────────────────────
 DJANGO_APPS = [
