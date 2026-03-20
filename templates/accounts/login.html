@@ -1,0 +1,97 @@
+<!-- ============================================================
+     Login page
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — ForexBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/main.css"/>
+  <style>
+    body { justify-content: center; align-items: center; background: var(--bg-primary); }
+    .auth-card {
+      width: 420px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+    }
+    .auth-logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .auth-logo .brand-icon { font-size: 36px; display: block; margin-bottom: 8px; color: var(--accent); filter: drop-shadow(0 0 12px var(--accent)); }
+    .auth-logo h1 { font-size: 22px; font-weight: 700; background: linear-gradient(135deg, var(--text-primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .auth-logo p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .auth-error { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 16px; display: none; }
+    .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="auth-card">
+  <div class="auth-logo">
+    <span class="brand-icon">⬡</span>
+    <h1>ForexBot</h1>
+    <p>Automated Trading Platform</p>
+  </div>
+
+  <div class="auth-error" id="loginError"></div>
+
+  <form id="loginForm">
+    <div class="form-group">
+      <label class="form-label">Email Address</label>
+      <input type="email" id="email" class="form-input"
+             placeholder="trader@example.com" autocomplete="email" required/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" id="password" class="form-input"
+             placeholder="••••••••" autocomplete="current-password" required/>
+    </div>
+    <button type="submit" class="btn btn-primary"
+            style="width:100%;justify-content:center;padding:11px"
+            id="loginBtn">
+      Sign In
+    </button>
+  </form>
+
+  <div class="auth-footer">
+    Don't have an account? <a href="/accounts/register/">Register</a>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn   = document.getElementById('loginBtn');
+  const error = document.getElementById('loginError');
+  btn.textContent = 'Signing in…';
+  btn.disabled    = true;
+  error.style.display = 'none';
+
+  try {
+    const res = await API.login(
+      document.getElementById('email').value,
+      document.getElementById('password').value,
+    );
+    if (res?.success) {
+      window.location.href = '/dashboard/';
+    } else {
+      error.textContent   = res?.errors?.non_field_errors?.[0] || 'Invalid credentials.';
+      error.style.display = 'block';
+    }
+  } catch(e) {
+    error.textContent   = e.message || 'Login failed.';
+    error.style.display = 'block';
+  } finally {
+    btn.textContent = 'Sign In';
+    btn.disabled    = false;
+  }
+});
+</script>
+</body>
+</html>
