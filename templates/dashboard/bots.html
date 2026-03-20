@@ -1,0 +1,171 @@
+{% extends "base/base.html" %}
+{% load trading_filters %}
+{% block title %}Bots{% endblock %}
+{% block nav_bots %}active{% endblock %}
+{% block page_title %}Trading Bots{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Trading Bots</h1>
+  <button class="btn btn-primary" onclick="document.getElementById('createBotModal').classList.add('open')">
+    + New Bot
+  </button>
+</div>
+
+<div class="bots-grid" id="botsGrid">
+  <div style="color:var(--text-muted);padding:20px">Loading bots…</div>
+</div>
+
+<!-- Create Bot Modal -->
+<div class="modal-overlay" id="createBotModal">
+  <div class="modal">
+    <div class="modal-title">Create New Bot</div>
+    <div id="createBotError" class="auth-error" style="display:none"></div>
+    <div class="form-group">
+      <label class="form-label">Bot Name</label>
+      <input type="text" id="botName" class="form-input" placeholder="e.g. EUR/USD Trend Bot"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Strategy</label>
+      <select id="botStrategy" class="form-select"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Trading Account</label>
+      <select id="botAccount" class="form-select"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Symbols (comma separated)</label>
+      <input type="text" id="botSymbols" class="form-input" placeholder="EUR_USD, GBP_USD"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Timeframe</label>
+      <select id="botTimeframe" class="form-select">
+        <option value="M5">M5</option><option value="M15">M15</option>
+        <option value="M30">M30</option><option value="H1" selected>H1</option>
+        <option value="H4">H4</option><option value="D1">D1</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Risk % per trade</label>
+      <input type="number" id="botRisk" class="form-input" value="1.0" min="0.1" max="10" step="0.1"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-primary" onclick="createBot()" style="flex:1">Create Bot</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('createBotModal').classList.remove('open')">Cancel</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function guardAuth() {
+  const token = localStorage.getItem('access_token');
+  if (!token) { window.location.href = '/accounts/login/?next=/bots/'; return; }
+})();
+
+async function loadBots() {
+  const data = await API.getBots();
+  const bots = data.bots || [];
+  const grid = document.getElementById('botsGrid');
+
+  if (!bots.length) {
+    grid.innerHTML = `<div style="color:var(--text-muted);padding:40px;text-align:center;
+      border:1px dashed var(--border);border-radius:var(--radius-md)">
+      No bots yet. Click <strong>+ New Bot</strong> to create one.</div>`;
+    return;
+  }
+
+  grid.innerHTML = bots.map(bot => {
+    const pnl = parseFloat(bot.total_profit_loss || 0);
+    const cls = pnl >= 0 ? 'positive' : 'negative';
+    const sign = pnl >= 0 ? '+' : '';
+    return `
+    <div class="bot-card" onclick="location.href='/bots/${bot.id}/'">
+      <div class="bot-card-header">
+        <div>
+          <div class="bot-name">${bot.name}</div>
+          <div class="bot-strategy">${bot.strategy_name || '—'} · ${(bot.symbols||[]).join(', ')||'—'} · ${bot.timeframe||'—'}</div>
+        </div>
+        <span class="badge badge-${bot.status}">${bot.status}</span>
+      </div>
+      <div class="bot-stats">
+        <div><div class="bot-stat-label">P&L</div>
+          <div class="bot-stat-value ${cls}">${sign}${pnl.toFixed(2)}</div></div>
+        <div><div class="bot-stat-label">Win Rate</div>
+          <div class="bot-stat-value">${parseFloat(bot.win_rate||0).toFixed(1)}%</div></div>
+        <div><div class="bot-stat-label">Trades</div>
+          <div class="bot-stat-value">${bot.total_trades||0}</div></div>
+      </div>
+      <div class="bot-controls" onclick="event.stopPropagation()">
+        ${bot.status==='running'
+          ? `<button class="btn btn-warning btn-sm" onclick="ctrl('${bot.id}','pause')">⏸</button>
+             <button class="btn btn-danger btn-sm"  onclick="ctrl('${bot.id}','stop')">⏹</button>`
+          : `<button class="btn btn-success btn-sm" onclick="ctrl('${bot.id}','start')">▶</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="location.href='/bots/${bot.id}/'">Details</button>
+        <button class="btn btn-danger btn-sm"  onclick="deleteBot('${bot.id}',event)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function ctrl(id, action) {
+  const fns = {start:API.startBot,stop:API.stopBot,pause:API.pauseBot,resume:API.resumeBot};
+  try {
+    const res = await fns[action](id);
+    if (res?.success) { UI.toast(`Bot ${action}ed`,'success'); loadBots(); }
+    else UI.toast(res?.message||'Failed','error');
+  } catch(e) { UI.toast(e.message,'error'); }
+}
+
+async function deleteBot(id, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this bot?')) return;
+  const res = await API.deleteBot(id);
+  if (res?.success) { UI.toast('Bot deleted','success'); loadBots(); }
+  else UI.toast(res?.message||'Delete failed','error');
+}
+
+async function populateCreateForm() {
+  const [strats, accounts] = await Promise.all([API.getStrategies(), API.getAccounts()]);
+  const ss = document.getElementById('botStrategy');
+  const sa = document.getElementById('botAccount');
+  (strats.own||[]).forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; ss.appendChild(o); });
+  (accounts.results||accounts.accounts||[]).forEach(a => { const o=document.createElement('option'); o.value=a.id; o.textContent=a.name; sa.appendChild(o); });
+}
+
+async function createBot() {
+  const name     = document.getElementById('botName').value.trim();
+  const strategy = document.getElementById('botStrategy').value;
+  const account  = document.getElementById('botAccount').value;
+  const symbols  = document.getElementById('botSymbols').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const timeframe= document.getElementById('botTimeframe').value;
+  const risk     = parseFloat(document.getElementById('botRisk').value);
+  const errEl    = document.getElementById('createBotError');
+
+  if (!name||!strategy||!account||!symbols.length) {
+    errEl.textContent='Please fill in all fields.'; errEl.style.display='block'; return;
+  }
+
+  try {
+    const res = await API.createBot({
+      name, strategy, trading_account: account,
+      symbols, timeframe, broker:'oanda',
+      allow_buy:true, allow_sell:true,
+      risk_settings: { risk_percent:risk, stop_loss_pips:50, take_profit_pips:100,
+                       max_trades_per_day:10, max_open_trades:3, max_drawdown_percent:20 }
+    });
+    if (res?.success) {
+      UI.toast('Bot created!','success');
+      document.getElementById('createBotModal').classList.remove('open');
+      loadBots();
+    } else {
+      errEl.textContent=res?.message||JSON.stringify(res?.errors||'Failed');
+      errEl.style.display='block';
+    }
+  } catch(e) { errEl.textContent=e.message; errEl.style.display='block'; }
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadBots(); populateCreateForm(); });
+</script>
+{% endblock %}
