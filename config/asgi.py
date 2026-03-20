@@ -1,31 +1,39 @@
 # ============================================================
-# DESTINATION: /opt/forex_bot/config/asgi.py
-# ASGI Configuration — supports HTTP + WebSocket via Channels
+# ASGI Configuration — HTTP + WebSocket via Django Channels
 # ============================================================
 import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
 from channels.security.websocket import AllowedHostsOriginValidator
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
-# Import websocket URL patterns (defined in Phase L)
-# Deferred import to avoid circular imports during Phase A
-def get_websocket_urlpatterns():
-    try:
-        from apps.trading import routing as trading_routing
-        return trading_routing.websocket_urlpatterns
-    except (ImportError, AttributeError):
-        return []
-
+# Must initialise Django before importing channel middleware
 django_asgi_app = get_asgi_application()
 
-application = ProtocolTypeRouter({
-    'http': django_asgi_app,
-    'websocket': AllowedHostsOriginValidator(
-        AuthMiddlewareStack(
-            URLRouter(get_websocket_urlpatterns())
-        )
-    ),
-})
+
+def get_application():
+    """
+    Deferred build so Django is fully initialised before
+    importing JWT middleware and routing.
+    """
+    from apps.trading.routing import websocket_urlpatterns
+    from channels.auth import AuthMiddlewareStack
+    from .ws_middleware import JWTAuthMiddleware
+
+    return ProtocolTypeRouter({
+        # Standard HTTP — handled by Django
+        'http': django_asgi_app,
+
+        # WebSocket — JWT authenticated, Channels-routed
+        'websocket': AllowedHostsOriginValidator(
+            JWTAuthMiddleware(
+                AuthMiddlewareStack(
+                    URLRouter(websocket_urlpatterns)
+                )
+            )
+        ),
+    })
+
+
+application = get_application()
