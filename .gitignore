@@ -23,6 +23,7 @@ test_backtesting.sh
 test_nlp.sh
 start_workers.sh
 test_celery.sh
+test_websocket.sh
 
 
 .idea/
