@@ -1,6 +1,12 @@
 # ============================================================
 # Master URL Configuration
 # ============================================================
+from apps.trading.dashboard_views import (
+    dashboard, bots_list, bot_detail, strategies_list,
+    backtesting_page, market_data_page, risk_page,
+    login_page, register_page,
+)
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -17,6 +23,17 @@ API_V1 = 'api/v1/'
 urlpatterns = [
     # ── Django Admin ──────────────────────────────────────────
     path('admin/', admin.site.urls),
+
+    path('',               login_page,       name='home'),
+    path('dashboard/',     dashboard,        name='dashboard'),
+    path('bots/',          bots_list,        name='bots'),
+    path('bots/<uuid:bot_id>/', bot_detail,  name='bot-detail'),
+    path('strategies/',    strategies_list,  name='strategies'),
+    path('backtesting/',   backtesting_page, name='backtesting'),
+    path('market-data/',   market_data_page, name='market-data'),
+    path('risk/',          risk_page,        name='risk'),
+    path('accounts/login/',    login_page,   name='login'),
+    path('accounts/register/', register_page,name='register'),
 
     # ── API Apps ──────────────────────────────────────────────
     path(API_V1 + 'auth/',          include('apps.accounts.urls')),
