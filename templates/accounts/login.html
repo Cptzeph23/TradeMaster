@@ -12,6 +12,10 @@
   <link rel="stylesheet" href="/static/css/main.css"/>
   <style>
     body { justify-content: center; align-items: center; background: var(--bg-primary); }
+    .auth-wrap {
+      width: 100%; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
     .auth-card {
       width: 420px;
       background: var(--bg-card);
@@ -19,79 +23,133 @@
       border-radius: var(--radius-lg);
       padding: 40px;
     }
-    .auth-logo {
-      text-align: center;
-      margin-bottom: 32px;
+    .auth-logo { text-align: center; margin-bottom: 32px; }
+    .auth-logo .brand-icon {
+      font-size: 36px; display: block; margin-bottom: 8px;
+      color: var(--accent);
+      filter: drop-shadow(0 0 12px var(--accent));
     }
-    .auth-logo .brand-icon { font-size: 36px; display: block; margin-bottom: 8px; color: var(--accent); filter: drop-shadow(0 0 12px var(--accent)); }
-    .auth-logo h1 { font-size: 22px; font-weight: 700; background: linear-gradient(135deg, var(--text-primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .auth-logo h1 {
+      font-size: 22px; font-weight: 700;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
     .auth-logo p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-    .auth-error { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 16px; display: none; }
-    .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+    .auth-error {
+      background: var(--red-dim);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--red);
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .auth-footer {
+      text-align: center; margin-top: 20px;
+      font-size: 13px; color: var(--text-muted);
+    }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-<div class="auth-card">
-  <div class="auth-logo">
-    <span class="brand-icon">⬡</span>
-    <h1>ForexBot</h1>
-    <p>Automated Trading Platform</p>
-  </div>
-
-  <div class="auth-error" id="loginError"></div>
-
-  <form id="loginForm">
-    <div class="form-group">
-      <label class="form-label">Email Address</label>
-      <input type="email" id="email" class="form-input"
-             placeholder="trader@example.com" autocomplete="email" required/>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="brand-icon">⬡</span>
+      <h1>ForexBot</h1>
+      <p>Automated Trading Platform</p>
     </div>
-    <div class="form-group">
-      <label class="form-label">Password</label>
-      <input type="password" id="password" class="form-input"
-             placeholder="••••••••" autocomplete="current-password" required/>
+ 
+    <div class="auth-error" id="loginError"></div>
+ 
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="email" class="form-input"
+               placeholder="trader@example.com"
+               autocomplete="email" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="password" class="form-input"
+               placeholder="••••••••"
+               autocomplete="current-password" required/>
+      </div>
+      <button type="submit" class="btn btn-primary"
+              style="width:100%;justify-content:center;padding:11px"
+              id="loginBtn">
+        Sign In
+      </button>
+    </form>
+ 
+    <div class="auth-footer">
+      Don't have an account? <a href="/accounts/register/">Register</a>
     </div>
-    <button type="submit" class="btn btn-primary"
-            style="width:100%;justify-content:center;padding:11px"
-            id="loginBtn">
-      Sign In
-    </button>
-  </form>
-
-  <div class="auth-footer">
-    Don't have an account? <a href="/accounts/register/">Register</a>
   </div>
 </div>
-
+ 
 <script src="/static/js/api.js"></script>
 <script>
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn   = document.getElementById('loginBtn');
-  const error = document.getElementById('loginError');
-  btn.textContent = 'Signing in…';
-  btn.disabled    = true;
-  error.style.display = 'none';
-
-  try {
-    const res = await API.login(
-      document.getElementById('email').value,
-      document.getElementById('password').value,
-    );
-    if (res?.success) {
-      window.location.href = '/dashboard/';
-    } else {
-      error.textContent   = res?.errors?.non_field_errors?.[0] || 'Invalid credentials.';
-      error.style.display = 'block';
+  // If already logged in (token exists and not expired), skip to dashboard
+  (function() {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      // Quick check: decode JWT payload to see if it's expired
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const now     = Math.floor(Date.now() / 1000);
+        if (payload.exp > now) {
+          window.location.href = '/dashboard/';
+          return;
+        }
+      } catch(e) { /* token malformed — stay on login */ }
     }
-  } catch(e) {
-    error.textContent   = e.message || 'Login failed.';
-    error.style.display = 'block';
-  } finally {
-    btn.textContent = 'Sign In';
-    btn.disabled    = false;
+  })();
+ 
+  async function handleLogin(e) {
+    e.preventDefault();
+ 
+    const btn   = document.getElementById('loginBtn');
+    const error = document.getElementById('loginError');
+    const email = document.getElementById('email').value.trim();
+    const pass  = document.getElementById('password').value;
+ 
+    btn.innerHTML = '<span class="spinner"></span>Signing in…';
+    btn.disabled  = true;
+    error.style.display = 'none';
+ 
+    try {
+      const res = await API.login(email, pass);
+ 
+      if (res && res.success) {
+        // JWT stored in localStorage by API.login()
+        // Now redirect — no session cookie needed
+        const next = new URLSearchParams(window.location.search).get('next');
+        window.location.href = next || '/dashboard/';
+      } else {
+        const msg = res?.errors?.non_field_errors?.[0]
+                 || res?.message
+                 || 'Invalid email or password.';
+        error.textContent   = msg;
+        error.style.display = 'block';
+      }
+    } catch(e) {
+      error.textContent   = e.message || 'Login failed. Is the server running?';
+      error.style.display = 'block';
+    } finally {
+      btn.innerHTML = 'Sign In';
+      btn.disabled  = false;
+    }
   }
-});
 </script>
 </body>
 </html>
+ 

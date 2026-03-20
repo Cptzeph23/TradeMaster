@@ -108,6 +108,48 @@
 let equityChart = null;
 const activeBotIds = [];
 
+(function guardAuth() {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    window.location.href = '/accounts/login/?next=' + encodeURIComponent(window.location.pathname);
+    return;
+  }
+  // Check token not expired
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const now     = Math.floor(Date.now() / 1000);
+    if (payload.exp <= now) {
+      // Try to refresh
+      const refresh = localStorage.getItem('refresh_token');
+      if (!refresh) {
+        window.location.href = '/accounts/login/?next=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
+      // Async refresh — if it fails, login page handles it
+      fetch('/api/v1/auth/token/refresh/', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ refresh }),
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.access) {
+          localStorage.setItem('access_token', d.access);
+          if (d.refresh) localStorage.setItem('refresh_token', d.refresh);
+        } else {
+          window.location.href = '/accounts/login/';
+        }
+      })
+      .catch(() => { window.location.href = '/accounts/login/'; });
+    }
+  } catch(e) {
+    localStorage.removeItem('access_token');
+    window.location.href = '/accounts/login/';
+  }
+})();
+
+
+
 async function loadDashboard() {
   try {
     const data = await API.getBots();
