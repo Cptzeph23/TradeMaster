@@ -62,6 +62,11 @@ class StrategyType(models.TextChoices):
     BREAKOUT        = 'breakout',       'Breakout Strategy'
     MEAN_REVERSION  = 'mean_reversion', 'Mean Reversion'
     CUSTOM          = 'custom',         'Custom Strategy'
+    ICHIMOKU       = 'ichimoku',        'Ichimoku Cloud'
+    MACD_DIV       = 'macd_divergence', 'MACD Divergence'
+    STOCHASTIC     = 'stochastic',      'Stochastic Oscillator'
+    EMA_RIBBON     = 'ema_ribbon',      'EMA Ribbon'
+    ATR_BREAKOUT   = 'atr_breakout',    'ATR Channel Breakout'
 
 
 # ── Signal Types ─────────────────────────────────────────────

@@ -107,4 +107,4 @@ class Strategy(models.Model):
     def instantiate(self):
         """Return an initialised strategy instance with stored parameters."""
         cls = self.get_plugin_class()
-        return cls(parameters=self.parameters)
+        return cls(self.parameters)

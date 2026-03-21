@@ -30,7 +30,7 @@ diagnose.sh
 add_strategy_types.py
 diagnose2.sh
 diagnose3.sh
-
+fix_strategy_type_enum.py
 .idea/
 *.iml
 *.log
