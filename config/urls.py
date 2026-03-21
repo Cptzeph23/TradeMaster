@@ -1,6 +1,7 @@
 # ============================================================
 # COMPLETE — all routes including logout, bots/new, ws silencer
 # ============================================================
+from services.telegram.webhook_view import telegram_webhook
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -75,6 +76,9 @@ urlpatterns = [
     # ── WebSocket fallback (HTTP only — stops 404 spam) ────────
     # When running manage.py runserver (no Daphne), return helpful error
     path('ws/<path:path>', ws_unavailable, name='ws-fallback'),
+    path('api/v1/telegram/webhook/<str:secret_token>/',
+        telegram_webhook,
+       name='telegram-webhook'),
 ]
 
 if settings.DEBUG:
@@ -84,3 +88,12 @@ if settings.DEBUG:
 admin.site.site_header  = 'ForexBot Admin'
 admin.site.site_title   = 'ForexBot Admin Portal'
 admin.site.index_title  = 'Trading Platform Administration'
+
+
+
+TELEGRAM_URL_ENTRY = """
+    # Telegram webhook
+    path('api/v1/telegram/webhook/<str:secret_token>/',
+         telegram_webhook,
+         name='telegram-webhook'),
+"""
