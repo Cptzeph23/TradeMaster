@@ -4,6 +4,8 @@
 # ============================================================
 import logging
 from celery import shared_task
+from celery import shared_task
+import logging
 
 logger = logging.getLogger('trading')
 
@@ -218,3 +220,66 @@ def fetch_market_data(symbol: str, timeframe: str,
     """Fetch market data — unchanged from Phase I."""
     from apps.market_data.tasks import fetch_and_cache_candles
     return fetch_and_cache_candles(symbol, timeframe, count, broker)
+
+
+
+@shared_task(name='workers.tasks.process_telegram_update')
+def process_telegram_update(update_data: dict):
+    """
+    Process an incoming Telegram update (command from trader).
+    Runs in Celery so the webhook returns 200 instantly.
+    """
+    try:
+        from services.telegram.bot import get_telegram_bot
+        bot = get_telegram_bot()
+        bot.handle_update(update_data)
+    except Exception as e:
+        logger.error(f"process_telegram_update failed: {e}", exc_info=True)
+ 
+ 
+@shared_task(name='workers.tasks.send_telegram_daily_report')
+def send_telegram_daily_report():
+    """
+    Triggered by Celery Beat at midnight UTC.
+    Computes daily stats and sends Telegram summary.
+    """
+    from datetime import datetime, timezone, timedelta
+    from apps.trading.models import TradingBot, Trade
+    from utils.constants import TradeStatus, BotStatus
+    from services.telegram.alerts import send_daily_report
+ 
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+ 
+    trades = Trade.objects.filter(
+        status=TradeStatus.CLOSED,
+        closed_at__gte=today_start,
+    )
+ 
+    pnl_list = [float(t.profit_loss or 0) for t in trades]
+    winners  = [p for p in pnl_list if p > 0]
+    losers   = [p for p in pnl_list if p <= 0]
+    total_pnl= sum(pnl_list)
+    win_rate = round(len(winners)/len(pnl_list)*100, 1) if pnl_list else 0
+ 
+    running_bots = TradingBot.objects.filter(
+        status=BotStatus.RUNNING, is_active=True
+    ).count()
+ 
+    stats = {
+        'total_trades': len(pnl_list),
+        'winners':      len(winners),
+        'losers':       len(losers),
+        'total_pnl':    total_pnl,
+        'win_rate':     win_rate,
+        'best_trade':   max(pnl_list) if pnl_list else 0,
+        'worst_trade':  min(pnl_list) if pnl_list else 0,
+        'running_bots': running_bots,
+    }
+ 
+    date_str = today_start.strftime('%Y-%m-%d')
+    send_daily_report(date_str, stats)
+    return stats
+ 
+
