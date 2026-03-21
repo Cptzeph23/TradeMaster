@@ -4,6 +4,23 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+
+  <!-- PWA Manifest -->
+<link rel="manifest" href="/static/manifest.json"/>
+ 
+<!-- iOS PWA support -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ForexBot"/>
+<link rel="apple-touch-icon" href="/static/images/icons/icon-192.png"/>
+ 
+<!-- Theme colour (browser tab + Android chrome) -->
+<meta name="theme-color" content="#3b82f6"/>
+ 
+<!-- Mobile viewport -->
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="application-name" content="ForexBot"/>
+
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}ForexBot{% endblock %} — ForexBot Platform</title>
@@ -93,5 +110,46 @@
 <script src="/static/js/websocket.js"></script>
 <script src="/static/js/main.js"></script>
 {% block extra_scripts %}{% endblock %}
+
+<script>
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/static/js/sw.js', { scope: '/' })
+      .then(reg => {
+        console.log('[SW] Registered:', reg.scope);
+        // Update last online time for offline page
+        localStorage.setItem('forexbot_last_online', Date.now().toString());
+      })
+      .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+}
+ 
+// Show install prompt on mobile
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show "Add to Home Screen" button if present
+  const installBtn = document.getElementById('installPWA');
+  if (installBtn) installBtn.style.display = 'flex';
+});
+ 
+function installPWA() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(choice => {
+    if (choice.outcome === 'accepted') {
+      console.log('[PWA] Installed to home screen');
+    }
+    deferredInstallPrompt = null;
+    const btn = document.getElementById('installPWA');
+    if (btn) btn.style.display = 'none';
+  });
+}
+</script>
+ 
+
 </body>
 </html>
