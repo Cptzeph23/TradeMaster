@@ -27,6 +27,10 @@ test_websocket.sh
 test_strategies_n.sh
 test_strategies_8001.sh
 diagnose.sh
+add_strategy_types.py
+diagnose2.sh
+diagnose3.sh
+
 .idea/
 *.iml
 *.log
