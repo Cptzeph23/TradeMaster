@@ -1,12 +1,11 @@
 # ============================================================
-# COMPLETE — all routes including logout, bots/new, ws silencer
+# URL Configuration for ForexBot
 # ============================================================
-from services.telegram.webhook_view import telegram_webhook
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import RedirectView
+from django.views.generic import RedirectView, TemplateView
 from django.http import JsonResponse
 from drf_spectacular.views import (
     SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView,
@@ -17,32 +16,6 @@ from apps.trading.dashboard_views import (
     login_page, register_page,
 )
 from apps.trading.mobile_urls import mobile_urlpatterns
-from django.views.generic import TemplateView
-
-from django.urls import path
-
-mobile_urlpatterns = [
-    # One-shot dashboard snapshot
-    path('dashboard/',                    MobileDashboardView.as_view(),   name='mobile-dashboard'),
- 
-    # Bot management
-    path('bots/',                         MobileBotsView.as_view(),        name='mobile-bots'),
-    path('bots/<uuid:bot_id>/<str:action>/', MobileBotControlView.as_view(), name='mobile-bot-control'),
- 
-    # Trade history
-    path('trades/',                       MobileTradesView.as_view(),      name='mobile-trades'),
- 
-    # Performance stats
-    path('stats/',                        MobileStatsView.as_view(),       name='mobile-stats'),
- 
-    # NLP command
-    path('command/',                      MobileNLPView.as_view(),         name='mobile-command'),
- 
-    # Live prices
-    path('prices/',                       MobilePriceView.as_view(),       name='mobile-prices'),
-]
- 
-
 
 API_V1 = 'api/v1/'
 
@@ -53,34 +26,32 @@ def logout_view(request):
 
 
 def ws_unavailable(request, path=''):
-    """
-    Friendly JSON response when WS routes are hit over HTTP.
-    Only happens when running manage.py runserver instead of Daphne.
-    """
+    """Return helpful error when WS routes are hit over plain HTTP."""
     return JsonResponse({
         'error': 'WebSocket not available over HTTP.',
         'fix':   'Start Daphne: daphne -b 127.0.0.1 -p 8001 config.asgi:application',
-    }, status=426)  # 426 Upgrade Required
+    }, status=426)
 
 
- 
 urlpatterns = [
     # ── Admin ──────────────────────────────────────────────────
     path(getattr(settings, 'ADMIN_URL', 'admin/'), admin.site.urls),
 
-    path('api/v1/mobile/', include((mobile_urlpatterns, 'mobile'))),
-    path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
     # ── Favicon ────────────────────────────────────────────────
     path('favicon.ico',
          RedirectView.as_view(url='/static/images/favicon.svg', permanent=True)),
 
+    # ── Offline PWA page ───────────────────────────────────────
+    path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
+
+    # ── Mobile API ─────────────────────────────────────────────
     path('api/v1/mobile/', include((mobile_urlpatterns, 'mobile'))),
 
     # ── Dashboard pages ────────────────────────────────────────
     path('',                         login_page,       name='home'),
     path('dashboard/',               dashboard,        name='dashboard'),
     path('bots/',                    bots_list,        name='bots'),
-    path('bots/new/',                bots_list,        name='bots-new'),  # handled by JS modal
+    path('bots/new/',                bots_list,        name='bots-new'),
     path('bots/<uuid:bot_id>/',      bot_detail,       name='bot-detail'),
     path('strategies/',              strategies_list,  name='strategies'),
     path('backtesting/',             backtesting_page, name='backtesting'),
@@ -100,18 +71,24 @@ urlpatterns = [
     path(API_V1 + 'market-data/',    include('apps.market_data.urls')),
     path(API_V1 + 'risk/',           include('apps.risk_management.urls')),
 
-    # ── OpenAPI ────────────────────────────────────────────────
+    # ── OpenAPI / Swagger ──────────────────────────────────────
     path('api/schema/', SpectacularAPIView.as_view(),   name='schema'),
     path('api/docs/',   SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/',  SpectacularRedocView.as_view(url_name='schema'),   name='redoc'),
 
-    # ── WebSocket fallback (HTTP only — stops 404 spam) ────────
-    # When running manage.py runserver (no Daphne), return helpful error
+    # ── WebSocket fallback ─────────────────────────────────────
     path('ws/<path:path>', ws_unavailable, name='ws-fallback'),
-    path('api/v1/telegram/webhook/<str:secret_token>/',
-        telegram_webhook,
-       name='telegram-webhook'),
 ]
+
+# ── Telegram webhook (only if token configured) ────────────
+try:
+    from apps.trading.telegram_views import telegram_webhook
+    urlpatterns += [
+        path('api/v1/telegram/webhook/<str:secret_token>/',
+             telegram_webhook, name='telegram-webhook'),
+    ]
+except ImportError:
+    pass
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL,  document_root=settings.MEDIA_ROOT)
@@ -120,12 +97,3 @@ if settings.DEBUG:
 admin.site.site_header  = 'ForexBot Admin'
 admin.site.site_title   = 'ForexBot Admin Portal'
 admin.site.index_title  = 'Trading Platform Administration'
-
-
-
-TELEGRAM_URL_ENTRY = """
-    # Telegram webhook
-    path('api/v1/telegram/webhook/<str:secret_token>/',
-         telegram_webhook,
-         name='telegram-webhook'),
-"""

@@ -47,15 +47,12 @@ app.conf.task_routes = {
 # ── Beat Schedule (periodic tasks) ──────────────────────────
 app.conf.beat_schedule = {
 
-    TELEGRAM_BEAT_ENTRY = """
-    # Telegram daily report (separate from email report)
-    'telegram-daily-report': {
-        'task':     'workers.tasks.send_telegram_daily_report',
-        'schedule': crontab(hour=0, minute=5),   # 00:05 UTC
-        'options':  {'queue': 'commands'},
+     'telegram-poll-commands': {
+        'task':     'telegram.poll_commands',
+        'schedule': 10.0,
+        'options':  {'queue': 'default', 'expires': 9},
     },
-"""
- 
+
 
     # ── Market data refresh ───────────────────────────────────
     # Fetch candles for all symbols used by running bots — every minute
