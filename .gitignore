@@ -24,8 +24,9 @@ test_nlp.sh
 start_workers.sh
 test_celery.sh
 test_websocket.sh
-
-
+test_strategies_n.sh
+test_strategies_8001.sh
+diagnose.sh
 .idea/
 *.iml
 *.log

@@ -1,12 +1,5 @@
 # ============================================================
-# Ichimoku Cloud Strategy
-#
-# Logic:
-#   ENTRY BUY:  price above cloud, tenkan > kijun, chikou above cloud
-#   ENTRY SELL: price below cloud, tenkan < kijun, chikou below cloud
-#   EXIT:       opposite crossover OR price re-enters cloud
-#   SL:         kijun-sen line (baseline)
-#   TP:         1.5 × risk (configurable RR)
+# FIXED: self.parameters → self.params (matches BaseStrategy.__init__)
 # ============================================================
 import pandas as pd
 import numpy as np
@@ -16,10 +9,6 @@ from ..registry import StrategyRegistry
 
 @StrategyRegistry.register('ichimoku')
 class IchimokuStrategy(BaseStrategy):
-    """
-    Classic Ichimoku Kinko Hyo trading system.
-    Uses all five components: Tenkan, Kijun, Senkou A/B, Chikou.
-    """
 
     NAME        = 'Ichimoku Cloud'
     DESCRIPTION = (
@@ -34,21 +23,25 @@ class IchimokuStrategy(BaseStrategy):
         'senkou_b_period': 52,
         'displacement':    26,
         'risk_reward':     1.5,
-        'cloud_filter':    True,   # price must be fully above/below cloud
-        'chikou_filter':   True,   # chikou span must confirm
+        'cloud_filter':    True,
+        'chikou_filter':   True,
     }
 
+    def _p(self, key):
+        """Get parameter — falls back to DEFAULT_PARAMETERS."""
+        return self.params.get(key, self.DEFAULT_PARAMETERS.get(key))
+
     def get_required_candles(self) -> int:
-        p = self.parameters
-        return p.get('senkou_b_period', 52) + p.get('displacement', 26) + 10
+        return int(self._p('senkou_b_period')) + int(self._p('displacement')) + 10
 
     def generate_signal(self, df: pd.DataFrame, symbol: str) -> Signal:
-        p          = self.parameters
-        tenkan_p   = int(p.get('tenkan_period',   9))
-        kijun_p    = int(p.get('kijun_period',   26))
-        senkou_b_p = int(p.get('senkou_b_period',52))
-        disp       = int(p.get('displacement',   26))
-        rr         = float(p.get('risk_reward',  1.5))
+        tenkan_p   = int(self._p('tenkan_period'))
+        kijun_p    = int(self._p('kijun_period'))
+        senkou_b_p = int(self._p('senkou_b_period'))
+        disp       = int(self._p('displacement'))
+        rr         = float(self._p('risk_reward'))
+        cloud_filt = self._p('cloud_filter')
+        chikou_filt= self._p('chikou_filter')
 
         if len(df) < self.get_required_candles():
             return Signal.neutral(symbol, 'Insufficient data')
@@ -60,40 +53,39 @@ class IchimokuStrategy(BaseStrategy):
         def mid(h, l, n):
             return (h.rolling(n).max() + l.rolling(n).min()) / 2
 
-        tenkan  = mid(high, low, tenkan_p)
-        kijun   = mid(high, low, kijun_p)
+        tenkan   = mid(high, low, tenkan_p)
+        kijun    = mid(high, low, kijun_p)
         senkou_a = ((tenkan + kijun) / 2).shift(disp)
         senkou_b = mid(high, low, senkou_b_p).shift(disp)
-        chikou  = close.shift(-disp)
 
-        price     = close.iloc[-1]
-        t_now     = tenkan.iloc[-1]
-        k_now     = kijun.iloc[-1]
-        t_prev    = tenkan.iloc[-2]
-        k_prev    = kijun.iloc[-2]
-        cloud_top = max(senkou_a.iloc[-1], senkou_b.iloc[-1])
-        cloud_bot = min(senkou_a.iloc[-1], senkou_b.iloc[-1])
+        price     = float(close.iloc[-1])
+        t_now     = float(tenkan.iloc[-1])
+        k_now     = float(kijun.iloc[-1])
+        t_prev    = float(tenkan.iloc[-2])
+        k_prev    = float(kijun.iloc[-2])
 
-        # Chikou span vs cloud 26 periods ago
-        chikou_val   = close.iloc[-1 - disp] if len(close) > disp else np.nan
-        cloud_top_26 = max(senkou_a.iloc[-1 - disp], senkou_b.iloc[-1 - disp]) if len(senkou_a) > disp else np.nan
-        cloud_bot_26 = min(senkou_a.iloc[-1 - disp], senkou_b.iloc[-1 - disp]) if len(senkou_b) > disp else np.nan
+        cloud_top = max(float(senkou_a.iloc[-1]), float(senkou_b.iloc[-1]))
+        cloud_bot = min(float(senkou_a.iloc[-1]), float(senkou_b.iloc[-1]))
 
-        # Tenkan/Kijun crossover
+        chikou_val   = float(close.iloc[-1 - disp]) if len(close) > disp else np.nan
+        cloud_top_26 = max(float(senkou_a.iloc[-1 - disp]), float(senkou_b.iloc[-1 - disp])) \
+                       if len(senkou_a) > disp else np.nan
+        cloud_bot_26 = min(float(senkou_a.iloc[-1 - disp]), float(senkou_b.iloc[-1 - disp])) \
+                       if len(senkou_b) > disp else np.nan
+
         bullish_cross = (t_prev <= k_prev) and (t_now > k_now)
         bearish_cross = (t_prev >= k_prev) and (t_now < k_now)
+        above_cloud   = price > cloud_top
+        below_cloud   = price < cloud_bot
+        chikou_above  = (not chikou_filt or
+                         (not np.isnan(chikou_val) and not np.isnan(cloud_top_26)
+                          and chikou_val > cloud_top_26))
+        chikou_below  = (not chikou_filt or
+                         (not np.isnan(chikou_val) and not np.isnan(cloud_bot_26)
+                          and chikou_val < cloud_bot_26))
 
-        # Cloud filters
-        above_cloud = price > cloud_top
-        below_cloud = price < cloud_bot
-        chikou_above = (not p.get('chikou_filter') or
-                        (not np.isnan(chikou_val) and chikou_val > cloud_top_26))
-        chikou_below = (not p.get('chikou_filter') or
-                        (not np.isnan(chikou_val) and chikou_val < cloud_bot_26))
-
-        pip_size = 0.01 if 'JPY' in symbol else 0.0001
-        sl_dist  = abs(price - k_now)
-        tp_dist  = sl_dist * rr
+        sl_dist = abs(price - k_now)
+        tp_dist = sl_dist * rr
 
         indicators = {
             'tenkan':    round(t_now, 5),
@@ -103,38 +95,26 @@ class IchimokuStrategy(BaseStrategy):
             'price':     round(price, 5),
         }
 
-        # ── BUY Signal ─────────────────────────────────────────
         if bullish_cross and above_cloud and chikou_above:
-            sl = price - sl_dist
-            tp = price + tp_dist
             return Signal(
-                action      = 'buy',
-                symbol      = symbol,
-                strength    = 0.8,
-                stop_loss   = round(sl, 5),
-                take_profit = round(tp, 5),
-                reason      = (f"Ichimoku BUY: Tenkan/Kijun cross above cloud "
-                               f"(cloud_top={cloud_top:.5f})"),
-                indicators  = indicators,
+                action='buy', symbol=symbol, strength=0.8,
+                stop_loss=round(price - sl_dist, 5),
+                take_profit=round(price + tp_dist, 5),
+                reason=f"Ichimoku BUY: Tenkan/Kijun cross above cloud",
+                indicators=indicators,
             )
 
-        # ── SELL Signal ────────────────────────────────────────
         if bearish_cross and below_cloud and chikou_below:
-            sl = price + sl_dist
-            tp = price - tp_dist
             return Signal(
-                action      = 'sell',
-                symbol      = symbol,
-                strength    = 0.8,
-                stop_loss   = round(sl, 5),
-                take_profit = round(tp, 5),
-                reason      = (f"Ichimoku SELL: Tenkan/Kijun cross below cloud "
-                               f"(cloud_bot={cloud_bot:.5f})"),
-                indicators  = indicators,
+                action='sell', symbol=symbol, strength=0.8,
+                stop_loss=round(price + sl_dist, 5),
+                take_profit=round(price - tp_dist, 5),
+                reason=f"Ichimoku SELL: Tenkan/Kijun cross below cloud",
+                indicators=indicators,
             )
 
         return Signal.neutral(
             symbol,
-            f"No signal — price={'above' if above_cloud else 'below' if below_cloud else 'IN'} cloud",
+            f"No signal — price {'above' if above_cloud else 'below' if below_cloud else 'IN'} cloud",
             indicators,
         )
