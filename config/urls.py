@@ -16,6 +16,33 @@ from apps.trading.dashboard_views import (
     backtesting_page, market_data_page, risk_page,
     login_page, register_page,
 )
+from apps.trading.mobile_urls import mobile_urlpatterns
+from django.views.generic import TemplateView
+
+from django.urls import path
+
+mobile_urlpatterns = [
+    # One-shot dashboard snapshot
+    path('dashboard/',                    MobileDashboardView.as_view(),   name='mobile-dashboard'),
+ 
+    # Bot management
+    path('bots/',                         MobileBotsView.as_view(),        name='mobile-bots'),
+    path('bots/<uuid:bot_id>/<str:action>/', MobileBotControlView.as_view(), name='mobile-bot-control'),
+ 
+    # Trade history
+    path('trades/',                       MobileTradesView.as_view(),      name='mobile-trades'),
+ 
+    # Performance stats
+    path('stats/',                        MobileStatsView.as_view(),       name='mobile-stats'),
+ 
+    # NLP command
+    path('command/',                      MobileNLPView.as_view(),         name='mobile-command'),
+ 
+    # Live prices
+    path('prices/',                       MobilePriceView.as_view(),       name='mobile-prices'),
+]
+ 
+
 
 API_V1 = 'api/v1/'
 
@@ -36,13 +63,18 @@ def ws_unavailable(request, path=''):
     }, status=426)  # 426 Upgrade Required
 
 
+ 
 urlpatterns = [
     # ── Admin ──────────────────────────────────────────────────
     path(getattr(settings, 'ADMIN_URL', 'admin/'), admin.site.urls),
 
+    path('api/v1/mobile/', include((mobile_urlpatterns, 'mobile'))),
+    path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
     # ── Favicon ────────────────────────────────────────────────
     path('favicon.ico',
          RedirectView.as_view(url='/static/images/favicon.svg', permanent=True)),
+
+    path('api/v1/mobile/', include((mobile_urlpatterns, 'mobile'))),
 
     # ── Dashboard pages ────────────────────────────────────────
     path('',                         login_page,       name='home'),
