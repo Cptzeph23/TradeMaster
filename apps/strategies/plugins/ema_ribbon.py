@@ -19,29 +19,33 @@ from ..registry import StrategyRegistry
 @StrategyRegistry.register('ema_ribbon')
 class EMARibbonStrategy(BaseStrategy):
  
-    NAME        = 'EMA Ribbon'
-    DESCRIPTION = 'Five-EMA Fibonacci ribbon with ADX trend confirmation.'
-    VERSION     = '1.0.0'
+    name        = 'EMA Ribbon'
+    description = 'Five-EMA Fibonacci ribbon — trades when all EMAs are stacked and ADX confirms trend.'
+    version     = '1.0.0'
+    author      = 'ForexBot Phase N'
  
     DEFAULT_PARAMETERS = {
-        'ema_periods':    [8, 13, 21, 34, 55],
-        'adx_period':     14,
-        'adx_threshold':  25,
-        'atr_period':     14,
-        'atr_sl_mult':    1.2,
-        'risk_reward':    3.0,
-        'expansion_bars': 3,
+        'ema_periods':   [8, 13, 21, 34, 55],
+        'adx_period':    14,
+        'adx_threshold': 25,
+        'atr_period':    14,
+        'atr_sl_mult':   1.2,
+        'risk_reward':   3.0,
+        'expansion_bars':3,
     }
  
     def _p(self, key):
         return self.params.get(key, self.DEFAULT_PARAMETERS.get(key))
  
     def get_required_candles(self) -> int:
-        periods = self._p('ema_periods') or [8, 13, 21, 34, 55]
+        periods = self._p('ema_periods') or [8,13,21,34,55]
         return max(periods) + int(self._p('adx_period')) + 20
  
-    def generate_signal(self, df: pd.DataFrame, symbol: str) -> Signal:
-        ema_ps     = self._p('ema_periods') or [8, 13, 21, 34, 55]
+    def get_default_parameters(self) -> dict:
+        return self.DEFAULT_PARAMETERS.copy()
+ 
+    def generate_signal(self, df: pd.DataFrame, symbol: str, **kwargs) -> Signal:
+        ema_ps     = self._p('ema_periods') or [8,13,21,34,55]
         adx_p      = int(self._p('adx_period'))
         adx_thresh = float(self._p('adx_threshold'))
         atr_p      = int(self._p('atr_period'))
@@ -50,7 +54,7 @@ class EMARibbonStrategy(BaseStrategy):
         exp_bars   = int(self._p('expansion_bars'))
  
         if len(df) < self.get_required_candles():
-            return Signal.neutral(symbol, 'Insufficient data')
+            return Signal(action='hold', symbol=symbol, reason='Insufficient data', strength=0.0)
  
         close = df['close'].astype(float)
         high  = df['high'].astype(float)
@@ -65,57 +69,47 @@ class EMARibbonStrategy(BaseStrategy):
         bear_aligned = all(ema_vals[i] < ema_vals[i+1] for i in range(len(ema_vals)-1))
  
         spread_now  = ema_vals[0] - ema_vals[-1]
-        spread_prev = (float(emas[ema_ps[0]].iloc[-1-exp_bars]) -
-                       float(emas[ema_ps[-1]].iloc[-1-exp_bars]))
-        expanding_bull = spread_now > spread_prev * 0.95
+        exp_idx     = min(exp_bars, len(df)-1)
+        spread_prev = (float(emas[ema_ps[0]].iloc[-1-exp_idx]) -
+                       float(emas[ema_ps[-1]].iloc[-1-exp_idx]))
+        expanding   = abs(spread_now) > abs(spread_prev) * 0.95
  
-        tr = pd.concat([
-            high - low,
-            (high - close.shift()).abs(),
-            (low  - close.shift()).abs(),
-        ], axis=1).max(axis=1)
-        atr_s   = tr.rolling(atr_p).mean()
-        atr_val = float(atr_s.iloc[-1])
+        tr    = pd.concat([high-low,(high-close.shift()).abs(),(low-close.shift()).abs()],axis=1).max(axis=1)
+        atr_s = tr.rolling(atr_p).mean()
+        atr_v = float(atr_s.iloc[-1])
  
-        pos_dm  = (high.diff()).clip(lower=0)
-        neg_dm  = (-low.diff()).clip(lower=0)
-        pos_dm  = pos_dm.where(pos_dm > neg_dm, 0)
-        neg_dm  = neg_dm.where(neg_dm > pos_dm, 0)
-        pos_di  = 100 * pos_dm.rolling(adx_p).mean() / atr_s.replace(0, np.nan)
-        neg_di  = 100 * neg_dm.rolling(adx_p).mean() / atr_s.replace(0, np.nan)
-        dx      = 100 * (pos_di - neg_di).abs() / (pos_di + neg_di).replace(0, np.nan)
-        adx     = float(dx.rolling(adx_p).mean().iloc[-1])
+        pos_dm = (high.diff()).clip(lower=0)
+        neg_dm = (-low.diff()).clip(lower=0)
+        pos_dm = pos_dm.where(pos_dm > neg_dm, 0)
+        neg_dm = neg_dm.where(neg_dm > pos_dm, 0)
+        di_sum = (100*pos_dm.rolling(adx_p).mean()/atr_s.replace(0,np.nan) +
+                  100*neg_dm.rolling(adx_p).mean()/atr_s.replace(0,np.nan)).replace(0,np.nan)
+        di_diff= (100*pos_dm.rolling(adx_p).mean()/atr_s.replace(0,np.nan) -
+                  100*neg_dm.rolling(adx_p).mean()/atr_s.replace(0,np.nan)).abs()
+        adx    = float((100*di_diff/di_sum).rolling(adx_p).mean().iloc[-1])
  
-        above_all = price > max(ema_vals)
-        below_all = price < min(ema_vals)
-        sl_ema    = float(emas[ema_ps[-1]].iloc[-1])
+        sl_ema = float(emas[ema_ps[-1]].iloc[-1])
+        indicators = {**{f'ema{p}':round(current_emas[p],5) for p in ema_ps},
+                      'adx':round(adx,2),'atr':round(atr_v,6)}
  
-        indicators = {
-            **{f'ema{p}': round(current_emas[p], 5) for p in ema_ps},
-            'adx': round(adx, 2), 'atr': round(atr_val, 6),
-            'bull_aligned': bull_aligned, 'bear_aligned': bear_aligned,
-        }
- 
-        if bull_aligned and above_all and expanding_bull and adx >= adx_thresh:
-            sl = sl_ema - atr_val * atr_mult
-            tp = price + abs(price - sl) * rr
+        if bull_aligned and price > max(ema_vals) and expanding and adx >= adx_thresh:
+            sl = sl_ema - atr_v * atr_mult
             return Signal(action='buy', symbol=symbol,
-                         strength=min(0.95, 0.6 + (adx - adx_thresh) / 100),
-                         stop_loss=round(sl, 5), take_profit=round(tp, 5),
-                         reason=f"EMA Ribbon BUY: All {len(ema_ps)} EMAs bullish, ADX={adx:.1f}",
+                         strength=min(0.95, 0.6+(adx-adx_thresh)/100),
+                         stop_loss=round(sl,5), take_profit=round(price+abs(price-sl)*rr,5),
+                         reason=f"EMA Ribbon BUY: {len(ema_ps)} EMAs bullish, ADX={adx:.1f}",
                          indicators=indicators)
  
-        if bear_aligned and below_all and adx >= adx_thresh:
-            sl = sl_ema + atr_val * atr_mult
-            tp = price - abs(sl - price) * rr
+        if bear_aligned and price < min(ema_vals) and adx >= adx_thresh:
+            sl = sl_ema + atr_v * atr_mult
             return Signal(action='sell', symbol=symbol,
-                         strength=min(0.95, 0.6 + (adx - adx_thresh) / 100),
-                         stop_loss=round(sl, 5), take_profit=round(tp, 5),
-                         reason=f"EMA Ribbon SELL: All {len(ema_ps)} EMAs bearish, ADX={adx:.1f}",
+                         strength=min(0.95, 0.6+(adx-adx_thresh)/100),
+                         stop_loss=round(sl,5), take_profit=round(price-abs(sl-price)*rr,5),
+                         reason=f"EMA Ribbon SELL: {len(ema_ps)} EMAs bearish, ADX={adx:.1f}",
                          indicators=indicators)
  
-        return Signal.neutral(symbol,
-            f"EMA Ribbon neutral — ADX={adx:.1f}, "
-            f"{'bull' if bull_aligned else 'bear' if bear_aligned else 'mixed'} aligned",
-            indicators)
+        alignment = 'bull' if bull_aligned else 'bear' if bear_aligned else 'mixed'
+        return Signal(action='hold', symbol=symbol, strength=0.0,
+                     reason=f"EMA Ribbon neutral — {alignment} aligned, ADX={adx:.1f}",
+                     indicators=indicators)
  
