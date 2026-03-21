@@ -446,3 +446,20 @@ if not DEBUG:
 
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
+
+
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN      = env('TELEGRAM_BOT_TOKEN',      default='')
+TELEGRAM_CHAT_ID        = env('TELEGRAM_CHAT_ID',        default='')
+TELEGRAM_WEBHOOK_SECRET = env('TELEGRAM_WEBHOOK_SECRET', default='')
+ 
+# Alert preferences (can be toggled per deployment)
+TELEGRAM_ALERTS = {
+    'trade_opened':    env.bool('TG_ALERT_TRADE_OPEN',    default=True),
+    'trade_closed':    env.bool('TG_ALERT_TRADE_CLOSE',   default=True),
+    'drawdown_warning':env.bool('TG_ALERT_DRAWDOWN',      default=True),
+    'bot_halted':      env.bool('TG_ALERT_HALT',          default=True),
+    'daily_report':    env.bool('TG_ALERT_DAILY_REPORT',  default=True),
+    'bot_started':     env.bool('TG_ALERT_BOT_START',     default=False),
+    'bot_stopped':     env.bool('TG_ALERT_BOT_STOP',      default=False),
+}
