@@ -4,28 +4,28 @@ bot
 
 .env.example
 
-test_apis.sh
-test_strategies.sh
-test_webhooks.sh
-test_market_data.sh
-test_broker_api.sh
-test_signal_generation.sh
-test_execution.sh
-test_risk_management.sh
-test_portfolio_management.sh
-test_reporting.sh
-test_utils.sh   
-test_trading.sh
-reset_and_setup.sh
-test_trading_8001.sh
-test_risk.sh
-test_backtesting.sh
-test_nlp.sh
-start_workers.sh
-test_celery.sh
-test_websocket.sh
-test_strategies_n.sh
-test_strategies_8001.sh
+# test_apis.sh
+# test_strategies.sh
+# test_webhooks.sh
+# test_market_data.sh
+# test_broker_api.sh
+# test_signal_generation.sh
+# test_execution.sh
+# test_risk_management.sh
+# test_portfolio_management.sh
+# test_reporting.sh
+# test_utils.sh   
+# test_trading.sh
+# reset_and_setup.sh
+# test_trading_8001.sh
+# test_risk.sh
+# test_backtesting.sh
+# test_nlp.sh
+# start_workers.sh
+# test_celery.sh
+# test_websocket.sh
+# test_strategies_n.sh
+# test_strategies_8001.sh
 diagnose.sh
 add_strategy_types.py
 diagnose2.sh
