@@ -7,6 +7,8 @@ from django.db import models
 from django.utils import timezone
 from utils.constants import Broker, AccountType
 from utils.encryption import encrypt_value, decrypt_value
+# from .portfolio_models import Portfolio, AccountAllocation
+
 
 
 # ── Custom User Manager ──────────────────────────────────────
@@ -123,6 +125,10 @@ class UserProfile(models.Model):
 
 # ── TradingAccount ───────────────────────────────────────────
 class TradingAccount(models.Model):
+    portfolio = models.ForeignKey(
+       'portfolio_models.Portfolio', on_delete=models.SET_NULL,  # Changed here
+       null=True, blank=True, related_name='trading_accounts'
+    )
     """
     Broker trading account linked to a User.
     API keys are stored ENCRYPTED using Fernet AES.
