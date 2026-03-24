@@ -16,6 +16,8 @@ from apps.trading.dashboard_views import (
     login_page, register_page,
 )
 from apps.trading.mobile_urls import mobile_urlpatterns
+from apps.accounts.portfolio_urls import portfolio_urlpatterns
+
 
 API_V1 = 'api/v1/'
 
@@ -36,6 +38,8 @@ def ws_unavailable(request, path=''):
 urlpatterns = [
     # ── Admin ──────────────────────────────────────────────────
     path(getattr(settings, 'ADMIN_URL', 'admin/'), admin.site.urls),
+
+    path('api/v1/accounts/', include((portfolio_urlpatterns, 'portfolios'))),
 
     # ── Favicon ────────────────────────────────────────────────
     path('favicon.ico',
