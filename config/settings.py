@@ -124,6 +124,7 @@ LOCAL_APPS = [
     'apps.backtesting',
     'apps.market_data',
     'apps.risk_management',
+    
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

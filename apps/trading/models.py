@@ -5,8 +5,6 @@ import uuid
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MinValueValidator, MaxValueValidator
-from apps.accounts.models import User, TradingAccount
-from apps.strategies.models import Strategy
 from utils.constants import (
     BotStatus, OrderType, TradeStatus,
     Timeframe, CommandType, Broker
@@ -40,15 +38,15 @@ class TradingBot(models.Model):
     """
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user            = models.ForeignKey(
-        User, on_delete=models.CASCADE,
+        'accounts.User', on_delete=models.CASCADE,  # String reference
         related_name='bots'
     )
     trading_account = models.ForeignKey(
-        TradingAccount, on_delete=models.PROTECT,
+        'accounts.TradingAccount', on_delete=models.PROTECT,  # String reference
         related_name='bots'
     )
     strategy        = models.ForeignKey(
-        Strategy, on_delete=models.PROTECT,
+        'strategies.Strategy', on_delete=models.PROTECT,  # String reference
         related_name='bots'
     )
 
@@ -146,7 +144,7 @@ class Trade(models.Model):
         related_name='trades'
     )
     trading_account = models.ForeignKey(
-        TradingAccount, on_delete=models.PROTECT,
+        'accounts.TradingAccount', on_delete=models.PROTECT,
         related_name='trades'
     )
 
@@ -312,7 +310,7 @@ class NLPCommand(models.Model):
 
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user        = models.ForeignKey(
-        User, on_delete=models.CASCADE,
+        'accounts.User', on_delete=models.CASCADE,
         related_name='nlp_commands'
     )
     bot         = models.ForeignKey(

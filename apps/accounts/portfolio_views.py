@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import serializers
 
-from .portfolio_models import Portfolio, AccountAllocation
+from .models import Portfolio, AccountAllocation
 from .models import TradingAccount
 from services.trading_engine.multi_account import MultiAccountManager
 

@@ -2,6 +2,7 @@
 # URL Configuration for ForexBot
 # ============================================================
 from django.contrib import admin
+from apps.accounts.portfolio_urls import portfolio_urlpatterns
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static

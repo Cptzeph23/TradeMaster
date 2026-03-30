@@ -1,5 +1,5 @@
 # ============================================================
-# User, UserProfile, TradingAccount models
+# User, UserProfile, TradingAccount, Portfolio, AccountAllocation models
 # ============================================================
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
@@ -7,8 +7,6 @@ from django.db import models
 from django.utils import timezone
 from utils.constants import Broker, AccountType
 from utils.encryption import encrypt_value, decrypt_value
-# from .portfolio_models import Portfolio, AccountAllocation
-
 
 
 # ── Custom User Manager ──────────────────────────────────────
@@ -125,10 +123,6 @@ class UserProfile(models.Model):
 
 # ── TradingAccount ───────────────────────────────────────────
 class TradingAccount(models.Model):
-    portfolio = models.ForeignKey(
-       'portfolio_models.Portfolio', on_delete=models.SET_NULL,  # Changed here
-       null=True, blank=True, related_name='trading_accounts'
-    )
     """
     Broker trading account linked to a User.
     API keys are stored ENCRYPTED using Fernet AES.
@@ -139,20 +133,26 @@ class TradingAccount(models.Model):
         User, on_delete=models.CASCADE,
         related_name='trading_accounts'
     )
+    
+    # Portfolio relationship - using string reference
+    portfolio = models.ForeignKey(
+        'accounts.Portfolio',  # String reference to avoid circular import
+        on_delete=models.SET_NULL,
+        null=True, blank=True, 
+        related_name='trading_accounts'
+    )
 
     # Account identity
-    name        = models.CharField(max_length=150)        # e.g. "OANDA Live EUR"
+    name        = models.CharField(max_length=150)
     broker      = models.CharField(max_length=30, choices=Broker.choices)
-    account_id  = models.CharField(max_length=100)        # broker-assigned account ID
-    account_type= models.CharField(
+    account_id  = models.CharField(max_length=100)
+    account_type = models.CharField(
         max_length=10,
         choices=AccountType.choices,
         default=AccountType.DEMO
     )
 
     # ── Encrypted broker credentials ─────────────────────────
-    # Raw values are NEVER stored — only the encrypted token.
-    # Use .get_api_key() / .set_api_key() methods below.
     _api_key_encrypted      = models.TextField(blank=True, db_column='api_key')
     _api_secret_encrypted   = models.TextField(blank=True, db_column='api_secret')
 
@@ -165,7 +165,7 @@ class TradingAccount(models.Model):
 
     # Status
     is_active       = models.BooleanField(default=True)
-    is_verified     = models.BooleanField(default=False)  # connection tested
+    is_verified     = models.BooleanField(default=False)
     last_synced     = models.DateTimeField(null=True, blank=True)
 
     # Timestamps
@@ -187,7 +187,6 @@ class TradingAccount(models.Model):
     def __str__(self):
         return f"{self.name} [{self.broker}] ({self.account_type})"
 
-    # ── API key helpers (encrypt/decrypt on the fly) ──────────
     def set_api_key(self, raw_key: str):
         self._api_key_encrypted = encrypt_value(raw_key)
 
@@ -200,9 +199,141 @@ class TradingAccount(models.Model):
     def get_api_secret(self) -> str:
         return decrypt_value(self._api_secret_encrypted)
 
-    # Keep raw keys out of repr / logs
     def __repr__(self):
         return (
             f"<TradingAccount id={self.id} broker={self.broker} "
             f"type={self.account_type} user={self.user_id}>"
         )
+
+
+# ── Portfolio ─────────────────────────────────────────────────
+class Portfolio(models.Model):
+    """
+    A named collection of TradingAccounts belonging to one user.
+    Allows grouping accounts (e.g. 'Live Accounts', 'Demo Testing').
+
+    A user can have multiple portfolios.
+    Each TradingAccount can belong to at most one portfolio.
+    """
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user        = models.ForeignKey(
+        User, on_delete=models.CASCADE, 
+        related_name='portfolios'
+    )
+    name        = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_default  = models.BooleanField(
+        default=False,
+        help_text="The default portfolio is shown on the main dashboard."
+    )
+    is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table    = 'accounts_portfolio'
+        ordering    = ['-is_default', 'name']
+        unique_together = [('user', 'name')]
+        verbose_name = 'Portfolio'
+        verbose_name_plural = 'Portfolios'
+
+    def __str__(self):
+        return f"{self.name} ({self.user.email})"
+
+    @property
+    def accounts(self):
+        return self.trading_accounts.filter(is_active=True)
+
+    @property
+    def total_balance(self) -> float:
+        return sum(
+            float(a.balance or 0) for a in self.accounts
+        )
+
+    @property
+    def total_equity(self) -> float:
+        return sum(
+            float(a.equity or 0) for a in self.accounts
+        )
+
+    @property
+    def total_pnl(self) -> float:
+        from apps.trading.models import Trade
+        from utils.constants import TradeStatus
+        pnl = Trade.objects.filter(
+            bot__trading_account__in=self.accounts,
+            status=TradeStatus.CLOSED,
+        ).values_list('profit_loss', flat=True)
+        return round(sum(float(p) for p in pnl), 2)
+
+    @property
+    def running_bots(self) -> int:
+        from apps.trading.models import TradingBot
+        from utils.constants import BotStatus
+        return TradingBot.objects.filter(
+            trading_account__in=self.accounts,
+            status=BotStatus.RUNNING,
+            is_active=True,
+        ).count()
+
+    @property
+    def open_trades(self) -> int:
+        from apps.trading.models import Trade
+        from utils.constants import TradeStatus
+        return Trade.objects.filter(
+            bot__trading_account__in=self.accounts,
+            status=TradeStatus.OPEN,
+        ).count()
+
+    def get_equity_curve(self) -> list:
+        """Combined equity curve across all accounts."""
+        from apps.trading.models import Trade
+        from utils.constants import TradeStatus
+        trades = Trade.objects.filter(
+            bot__trading_account__in=self.accounts,
+            status=TradeStatus.CLOSED,
+        ).order_by('closed_at').values_list('profit_loss', flat=True)
+
+        balance = self.total_balance
+        curve   = [round(balance - sum(float(p) for p in trades), 2)]
+        running = curve[0]
+        for pnl in trades:
+            running += float(pnl)
+            curve.append(round(running, 2))
+        return curve
+
+
+# ── AccountAllocation ─────────────────────────────────────────
+class AccountAllocation(models.Model):
+    """
+    Defines how much capital (%) is allocated to each account
+    within a portfolio. Used for portfolio-level risk management.
+    """
+    portfolio = models.ForeignKey(
+        Portfolio, on_delete=models.CASCADE,
+        related_name='allocations'
+    )
+    account   = models.ForeignKey(
+        TradingAccount, on_delete=models.CASCADE,
+        related_name='portfolio_allocations'
+    )
+    allocation_pct = models.FloatField(
+        default=100.0,
+        help_text="Percentage of portfolio capital allocated to this account (0-100)"
+    )
+    max_drawdown_pct = models.FloatField(
+        default=20.0,
+        help_text="Max drawdown for this account before it's paused"
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table        = 'accounts_allocation'
+        unique_together = [('portfolio', 'account')]
+        verbose_name = 'Account Allocation'
+        verbose_name_plural = 'Account Allocations'
+
+    def __str__(self):
+        return f"{self.portfolio.name} → {self.account.name} ({self.allocation_pct}%)"
+    
+    
