@@ -1,62 +1,34 @@
 # ============================================================
-# Custom exceptions for broker API layer
+# ABSOLUTE PATH: /opt/forex_bot/services/broker_api/exceptions.py
 # ============================================================
 
 
-class BrokerException(Exception):
-    """Base class for all broker errors."""
-    def __init__(self, message: str, code: str = 'BROKER_ERROR', raw=None):
+class BrokerError(Exception):
+    """Base exception for all broker errors."""
+
+
+class BrokerConnectionError(BrokerError):
+    """Raised when broker connection fails or drops."""
+
+
+class BrokerOrderError(BrokerError):
+    """Raised when order placement or modification fails."""
+    def __init__(self, message: str, retcode: int = 0):
         super().__init__(message)
-        self.message = message
-        self.code    = code
-        self.raw     = raw or {}
-
-    def __str__(self):
-        return f"[{self.code}] {self.message}"
+        self.retcode = retcode
 
 
-class BrokerAuthError(BrokerException):
-    """Invalid credentials or expired session."""
-    def __init__(self, message='Authentication failed with broker.'):
-        super().__init__(message, code='AUTH_ERROR')
+class BrokerAuthError(BrokerError):
+    """Raised when API credentials are invalid or expired."""
 
 
-class BrokerConnectionError(BrokerException):
-    """Network or connectivity issue reaching the broker."""
-    def __init__(self, message='Cannot connect to broker API.'):
-        super().__init__(message, code='CONNECTION_ERROR')
+class BrokerSymbolError(BrokerError):
+    """Raised when a requested symbol is not available on the broker."""
 
 
-class BrokerOrderError(BrokerException):
-    """Order was rejected or failed at the broker level."""
-    def __init__(self, message='Order rejected by broker.', raw=None):
-        super().__init__(message, code='ORDER_ERROR', raw=raw)
+class BrokerPositionError(BrokerError):
+    """Raised when a position operation (close/modify) fails."""
 
 
-class InsufficientMarginError(BrokerException):
-    """Not enough free margin to place the order."""
-    def __init__(self):
-        super().__init__('Insufficient margin for this order.', code='MARGIN_ERROR')
-
-
-class MarketClosedError(BrokerException):
-    """Market is closed for the requested instrument."""
-    def __init__(self, symbol=''):
-        super().__init__(
-            f"Market is closed for {symbol}." if symbol else "Market is closed.",
-            code='MARKET_CLOSED'
-        )
-
-
-class InvalidSymbolError(BrokerException):
-    """The requested symbol is not supported by this broker."""
-    def __init__(self, symbol=''):
-        super().__init__(
-            f"Symbol '{symbol}' is not supported.", code='INVALID_SYMBOL'
-        )
-
-
-class RateLimitError(BrokerException):
-    """Broker API rate limit exceeded."""
-    def __init__(self):
-        super().__init__('Broker API rate limit exceeded.', code='RATE_LIMIT')
+class BrokerRateLimitError(BrokerError):
+    """Raised when the broker API rate limit is exceeded."""
