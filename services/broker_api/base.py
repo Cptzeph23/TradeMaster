@@ -1,104 +1,240 @@
 # ============================================================
-# Abstract base class all broker connectors must implement
+# BrokerInterface — abstract base class all brokers must implement
 # ============================================================
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Optional
-from decimal import Decimal
+from typing import Optional, List
+import logging
+
+from .types import AccountInfo, PositionInfo, OrderResult, PriceInfo
+from .exceptions import BrokerConnectionError
+
+logger = logging.getLogger('trading.broker')
 
 
-@dataclass
-class OrderRequest:
-    """Standardised order request passed to any broker."""
-    symbol:      str
-    order_type:  str          # 'buy' | 'sell'
-    units:       int          # positive = buy, negative = sell (OANDA style)
-    lot_size:    float = 0.1
-    stop_loss:   Optional[float] = None
-    take_profit: Optional[float] = None
-    comment:     str = ''
-    magic:       int = 0      # MT5 magic number
-
-
-@dataclass
-class OrderResult:
-    """Standardised result returned by any broker after order placement."""
-    success:       bool
-    order_id:      str = ''
-    trade_id:      str = ''
-    fill_price:    float = 0.0
-    units_filled:  int = 0
-    error_message: str = ''
-    raw_response:  dict = field(default_factory=dict)
-
-
-@dataclass
-class AccountInfo:
-    """Standardised account summary from any broker."""
-    account_id: str
-    balance:    float
-    equity:     float
-    margin_used:  float
-    margin_free:  float
-    currency:   str
-    leverage:   int = 50
-    raw:        dict = field(default_factory=dict)
-
-
-class BaseBroker(ABC):
+class BrokerInterface(ABC):
     """
-    Abstract base class for all broker API connectors.
-    Every broker (OANDA, MT5, etc.) must implement these methods.
+    Abstract base class for all broker connectors.
+
+    Every broker (MT5, OANDA, etc.) MUST implement all
+    @abstractmethod methods below. The trading engine only
+    ever interacts with this interface — never with broker-
+    specific code directly. This allows swapping brokers
+    without changing any trading logic.
+
+    Lifecycle:
+        broker = OandaBroker(credentials)   # or MT5Broker
+        broker.connect()
+        info   = broker.get_account_info()
+        price  = broker.get_price('EURUSD')
+        order  = broker.place_order('EURUSD', 'buy', 0.1, ...)
+        broker.disconnect()
+
+    Context manager also supported:
+        with OandaBroker(credentials) as broker:
+            info = broker.get_account_info()
     """
+
+    def __init__(self, credentials: dict):
+        """
+        Args:
+            credentials: broker-specific dict.
+                MT5:   {'login': 123456, 'password': 'x', 'server': 'ICMarkets-Demo'}
+                OANDA: {'api_key': 'token', 'account_id': '101-001-x', 'environment': 'practice'}
+        """
+        self.credentials = credentials
+        self.connected   = False
+        self._logger     = logging.getLogger(
+            f'trading.broker.{self.__class__.__name__}'
+        )
+
+    # ── Connection lifecycle ──────────────────────────────────
 
     @abstractmethod
     def connect(self) -> bool:
-        """Establish connection / authenticate. Returns True on success."""
-        ...
+        """
+        Establish connection / verify credentials with the broker.
+        Must set self.connected = True on success.
+        Returns True on success, False on failure.
+        Never raises — catch and return False instead.
+        """
 
     @abstractmethod
     def disconnect(self) -> None:
-        """Clean up connection resources."""
-        ...
+        """
+        Close connection cleanly and release all resources.
+        Must set self.connected = False.
+        """
 
     @abstractmethod
-    def get_account_info(self) -> dict:
-        """Return raw account dict with at least: balance, equity, currency."""
-        ...
+    def is_connected(self) -> bool:
+        """
+        Return True if the broker connection is currently active.
+        Should do a lightweight liveness check, not a full reconnect.
+        """
+
+    # ── Account info ─────────────────────────────────────────
 
     @abstractmethod
-    def get_price(self, symbol: str) -> dict:
-        """Return current bid/ask dict for a symbol."""
-        ...
+    def get_account_info(self) -> AccountInfo:
+        """
+        Return current account snapshot: balance, equity, margin.
+        Raises BrokerConnectionError if not connected.
+        """
+
+    # ── Market data ───────────────────────────────────────────
 
     @abstractmethod
-    def place_order(self, order: OrderRequest) -> OrderResult:
-        """Place a market order and return the result."""
-        ...
+    def get_price(self, symbol: str) -> PriceInfo:
+        """
+        Return live bid/ask for a symbol.
+        symbol: 'EURUSD', 'XAUUSD', 'GBPUSD', etc.
+        Raises BrokerSymbolError if symbol unavailable.
+        """
 
     @abstractmethod
-    def close_trade(self, trade_id: str, units: Optional[int] = None) -> OrderResult:
-        """Close an open trade fully or partially."""
-        ...
+    def get_candles(
+        self,
+        symbol:    str,
+        timeframe: str,
+        count:     int = 200,
+    ) -> list:
+        """
+        Return OHLCV candle data as list of dicts.
+        Each dict: {'time': str, 'open': float, 'high': float,
+                    'low': float, 'close': float, 'volume': int}
+        timeframe: 'M1','M5','M15','M30','H1','H4','D1'
+        """
+
+    # ── Order execution ───────────────────────────────────────
 
     @abstractmethod
-    def get_open_trades(self) -> list:
-        """Return list of all open trade dicts."""
-        ...
+    def place_order(
+        self,
+        symbol:      str,
+        order_type:  str,
+        volume:      float,
+        stop_loss:   Optional[float] = None,
+        take_profit: Optional[float] = None,
+        comment:     str             = 'ForexBot',
+        magic:       int             = 0,
+    ) -> OrderResult:
+        """
+        Place a market order.
+
+        Args:
+            symbol:      e.g. 'EURUSD', 'XAUUSD'
+            order_type:  'buy' or 'sell'
+            volume:      lot size e.g. 0.10
+            stop_loss:   absolute price level (not pips)
+            take_profit: absolute price level (not pips)
+            comment:     broker-visible comment string
+            magic:       magic number for bot identification (MT5)
+
+        Returns:
+            OrderResult with success=True and ticket on success,
+            or success=False and error message on failure.
+        """
 
     @abstractmethod
-    def get_candles(self, symbol: str, timeframe: str,
-                    count: int = 200) -> list:
-        """Return list of OHLCV dicts for the given symbol/timeframe."""
-        ...
+    def close_position(
+        self,
+        ticket:  str,
+        volume:  Optional[float] = None,
+    ) -> OrderResult:
+        """
+        Close an open position.
 
-    def is_market_open(self, symbol: str) -> bool:
-        """Default implementation — override per broker if needed."""
-        from datetime import datetime, timezone as tz
-        now = datetime.now(tz.utc)
-        # Forex market closed Sat 22:00 UTC → Sun 22:00 UTC
-        if now.weekday() == 5:   # Saturday
-            return now.hour < 22
-        if now.weekday() == 6:   # Sunday
-            return now.hour >= 22
-        return True
+        Args:
+            ticket: position/trade ID from place_order result
+            volume: lots to close; None = close entire position
+
+        Returns OrderResult.
+        """
+
+    @abstractmethod
+    def modify_position(
+        self,
+        ticket:      str,
+        stop_loss:   Optional[float] = None,
+        take_profit: Optional[float] = None,
+    ) -> bool:
+        """
+        Modify SL and/or TP on an existing position.
+        Returns True on success.
+        """
+
+    # ── Position queries ──────────────────────────────────────
+
+    @abstractmethod
+    def get_open_positions(
+        self,
+        symbol: Optional[str] = None,
+    ) -> List[PositionInfo]:
+        """
+        Return all open positions.
+        If symbol is provided, filter to that symbol only.
+        Returns empty list (not None) when no positions found.
+        """
+
+    @abstractmethod
+    def get_position(self, ticket: str) -> Optional[PositionInfo]:
+        """
+        Return a single position by ticket ID.
+        Returns None if not found.
+        """
+
+    # ── Shared non-abstract helpers ───────────────────────────
+
+    def reconnect(self, max_retries: int = 3) -> bool:
+        """
+        Attempt reconnection with exponential backoff.
+        Called automatically by _ensure_connected().
+        """
+        import time
+        for attempt in range(1, max_retries + 1):
+            self._logger.info(
+                f"Reconnect attempt {attempt}/{max_retries}"
+            )
+            try:
+                if self.connect():
+                    self._logger.info("Reconnected successfully")
+                    return True
+            except Exception as e:
+                self._logger.warning(f"Reconnect attempt {attempt} failed: {e}")
+            time.sleep(2 ** attempt)   # 2s, 4s, 8s
+        self._logger.error(
+            f"All {max_retries} reconnect attempts failed"
+        )
+        return False
+
+    def _ensure_connected(self) -> None:
+        """
+        Internal guard — call at the start of any method that
+        requires an active broker connection.
+        Raises BrokerConnectionError if connection cannot be restored.
+        """
+        if not self.is_connected():
+            self._logger.warning(
+                "Broker not connected — attempting reconnect"
+            )
+            if not self.reconnect():
+                raise BrokerConnectionError(
+                    f"{self.__class__.__name__} is not connected "
+                    f"and all reconnect attempts failed."
+                )
+
+    # ── Context manager ───────────────────────────────────────
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()
+        return False   # don't suppress exceptions
+
+    def __repr__(self) -> str:
+        return (
+            f"<{self.__class__.__name__} "
+            f"connected={self.connected}>"
+        )
