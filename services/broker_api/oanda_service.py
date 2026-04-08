@@ -5,7 +5,7 @@ import logging
 import requests
 from typing import Optional, List
 from datetime import datetime, timezone
-
+from typing import Optional, List
 from .base import BrokerInterface
 from .types import AccountInfo, PositionInfo, OrderResult, PriceInfo
 from .exceptions import (
@@ -19,6 +19,8 @@ ENVIRONMENTS = {
     'live':     'https://api-fxtrade.oanda.com',
     'practice': 'https://api-fxpractice.oanda.com',
 }
+
+OANDA_BASE_URLS = ENVIRONMENTS
 
 # OANDA granularity strings
 TIMEFRAME_MAP = {
@@ -431,6 +433,434 @@ class OandaBroker(BrokerInterface):
         except requests.HTTPError as e:
             self._logger.error(
                 f"OANDA HTTP {e.response.status_code}: "
+                f"{e.response.text[:200]}"
+            )
+            raise
+        except Exception as e:
+            self._logger.error(f"OANDA request error: {e}")
+            raise
+
+
+# Our timeframe strings → OANDA granularity
+OANDA_TF_MAP = {
+    'M1':  'M1',  'M5':  'M5',  'M15': 'M15', 'M30': 'M30',
+    'H1':  'H1',  'H4':  'H4',  'D1':  'D',
+    'W1':  'W',   'MN1': 'M',
+}
+ 
+ 
+def _oanda_symbol(symbol: str) -> str:
+    """
+    Convert any symbol format to OANDA underscore format.
+    'EURUSD' → 'EUR_USD', 'XAUUSD' → 'XAU_USD', 'EUR_USD' → 'EUR_USD'
+    """
+    s = symbol.upper().replace('/', '').replace('-', '').replace(' ', '')
+    if '_' in s:
+        return s
+    # Special three-letter codes that aren't currency pairs
+    if s.startswith('XAU'):
+        return 'XAU_' + s[3:]
+    if s.startswith('XAG'):
+        return 'XAG_' + s[3:]
+    if len(s) == 6:
+        return s[:3] + '_' + s[3:]
+    return s
+ 
+ 
+class OandaBroker(BrokerInterface):
+    """
+    OANDA REST v20 broker connector.
+ 
+    credentials = {
+        'api_key':     'your-oanda-personal-access-token',
+        'account_id':  '101-001-0000001-001',
+        'environment': 'practice',   # 'practice' or 'live'
+        'timeout':     15,           # request timeout seconds (optional)
+    }
+    """
+ 
+    def __init__(self, credentials: dict):
+        super().__init__(credentials)
+        env = credentials.get('environment', 'practice').lower()
+        self._base     = OANDA_BASE_URLS.get(env, OANDA_BASE_URLS['practice'])
+        self._acct_id  = credentials.get('account_id', '')
+        self._timeout  = int(credentials.get('timeout', 15))
+        self._session  = requests.Session()
+        self._session.headers.update({
+            'Authorization': f"Bearer {credentials.get('api_key', '')}",
+            'Content-Type':  'application/json',
+            'Accept-Datetime-Format': 'RFC3339',
+        })
+ 
+    # ── Connection ────────────────────────────────────────────
+ 
+    def connect(self) -> bool:
+        """Verify credentials by fetching account summary."""
+        try:
+            resp = self._session.get(
+                f"{self._base}/v3/accounts/{self._acct_id}/summary",
+                timeout=self._timeout,
+            )
+            if resp.status_code == 401:
+                raise BrokerAuthError("OANDA: invalid API key")
+            if resp.status_code == 404:
+                raise BrokerAuthError(f"OANDA: account {self._acct_id} not found")
+            if resp.status_code == 200:
+                acct = resp.json().get('account', {})
+                self.connected = True
+                self._logger.info(
+                    f"OANDA connected: id={self._acct_id} "
+                    f"balance={acct.get('balance')} {acct.get('currency')}"
+                )
+                return True
+            self._logger.error(
+                f"OANDA connect: unexpected status {resp.status_code}"
+            )
+            return False
+        except BrokerAuthError:
+            raise
+        except Exception as e:
+            self._logger.error(f"OANDA connect error: {e}")
+            return False
+ 
+    def disconnect(self) -> None:
+        self._session.close()
+        self.connected = False
+        self._logger.info("OANDA session closed")
+ 
+    def is_connected(self) -> bool:
+        return self.connected
+ 
+    # ── Account ───────────────────────────────────────────────
+ 
+    def get_account_info(self) -> AccountInfo:
+        self._ensure_connected()
+        data = self._get(f"/v3/accounts/{self._acct_id}/summary")
+        a    = data.get('account', {})
+ 
+        margin_rate = float(a.get('marginRate', 0.02))
+        leverage    = int(round(1 / margin_rate)) if margin_rate > 0 else 50
+ 
+        return AccountInfo(
+            account_id   = self._acct_id,
+            broker       = 'OANDA',
+            balance      = float(a.get('balance', 0)),
+            equity       = float(a.get('NAV', 0)),
+            margin       = float(a.get('marginUsed', 0)),
+            free_margin  = float(a.get('marginAvailable', 0)),
+            margin_level = round(float(a.get('marginUsed', 0)) /
+                                 max(float(a.get('NAV', 1)), 1) * 100, 2),
+            currency     = a.get('currency', 'USD'),
+            leverage     = leverage,
+            is_live      = 'fxtrade' in self._base,
+            extra        = {
+                'unrealized_pnl':  a.get('unrealizedPL', '0'),
+                'open_trade_count':a.get('openTradeCount', 0),
+                'alias':           a.get('alias', ''),
+            }
+        )
+ 
+    # ── Market data ───────────────────────────────────────────
+ 
+    def get_price(self, symbol: str) -> PriceInfo:
+        self._ensure_connected()
+        oanda_sym = _oanda_symbol(symbol)
+        data = self._get(
+            f"/v3/accounts/{self._acct_id}/pricing",
+            params={'instruments': oanda_sym},
+        )
+        prices = data.get('prices', [])
+        if not prices:
+            raise BrokerSymbolError(
+                f"OANDA: no price returned for {symbol} ({oanda_sym})"
+            )
+        p   = prices[0]
+        bid = float(p['bids'][0]['price'])
+        ask = float(p['asks'][0]['price'])
+        return PriceInfo(
+            symbol    = symbol,
+            bid       = bid,
+            ask       = ask,
+            spread    = round(ask - bid, 5),
+            timestamp = p.get('time'),
+        )
+ 
+    def get_candles(
+        self,
+        symbol:    str,
+        timeframe: str,
+        count:     int = 200,
+    ) -> list:
+        self._ensure_connected()
+        oanda_sym = _oanda_symbol(symbol)
+        oanda_tf  = OANDA_TF_MAP.get(timeframe.upper(), 'H1')
+        data = self._get(
+            f"/v3/instruments/{oanda_sym}/candles",
+            params={
+                'granularity': oanda_tf,
+                'count':       min(count, 5000),
+                'price':       'M',   # midpoint candles
+            },
+        )
+        result = []
+        for c in data.get('candles', []):
+            if not c.get('complete', True):
+                continue
+            mid = c.get('mid', {})
+            result.append({
+                'time':   c['time'],
+                'open':   float(mid.get('o', 0)),
+                'high':   float(mid.get('h', 0)),
+                'low':    float(mid.get('l', 0)),
+                'close':  float(mid.get('c', 0)),
+                'volume': int(c.get('volume', 0)),
+            })
+        return result
+ 
+    # ── Order execution ───────────────────────────────────────
+ 
+    def place_order(
+        self,
+        symbol:      str,
+        order_type:  str,
+        volume:      float,
+        stop_loss:   Optional[float] = None,
+        take_profit: Optional[float] = None,
+        comment:     str             = 'ForexBot',
+        magic:       int             = 0,
+    ) -> OrderResult:
+        self._ensure_connected()
+        oanda_sym = _oanda_symbol(symbol)
+ 
+        # OANDA uses units: positive = buy, negative = sell
+        units = int(round(volume * 100_000))
+        if order_type.lower() == 'sell':
+            units = -units
+ 
+        body: dict = {
+            'order': {
+                'type':         'MARKET',
+                'instrument':   oanda_sym,
+                'units':        str(units),
+                'timeInForce':  'FOK',
+                'positionFill': 'DEFAULT',
+            }
+        }
+        if stop_loss is not None:
+            body['order']['stopLossOnFill'] = {
+                'price':       f"{stop_loss:.5f}",
+                'timeInForce': 'GTC',
+            }
+        if take_profit is not None:
+            body['order']['takeProfitOnFill'] = {
+                'price':       f"{take_profit:.5f}",
+                'timeInForce': 'GTC',
+            }
+ 
+        try:
+            resp = self._session.post(
+                f"{self._base}/v3/accounts/{self._acct_id}/orders",
+                json=body,
+                timeout=self._timeout,
+            )
+            data = resp.json()
+ 
+            if resp.status_code in (200, 201):
+                fc    = data.get('orderFillTransaction', {})
+                price = float(fc.get('price', 0))
+                self._logger.info(
+                    f"OANDA order filled: {order_type.upper()} "
+                    f"{volume} {symbol} @ {price} id={fc.get('id')}"
+                )
+                return OrderResult(
+                    success     = True,
+                    ticket      = str(fc.get('id', '')),
+                    symbol      = symbol,
+                    order_type  = order_type.lower(),
+                    volume      = volume,
+                    entry_price = price,
+                    stop_loss   = stop_loss,
+                    take_profit = take_profit,
+                    raw         = data,
+                )
+ 
+            # Order was created but not filled (e.g. market closed)
+            if resp.status_code == 201 and 'orderCancelTransaction' in data:
+                reason = data['orderCancelTransaction'].get('reason', 'UNKNOWN')
+                return OrderResult(
+                    success=False,
+                    error=f"Order cancelled: {reason}",
+                    raw=data,
+                )
+ 
+            err = data.get('errorMessage', data.get('message', str(data)))
+            self._logger.error(
+                f"OANDA order failed: {resp.status_code} — {err}"
+            )
+            return OrderResult(success=False, error=err, raw=data)
+ 
+        except Exception as e:
+            self._logger.error(f"OANDA place_order exception: {e}", exc_info=True)
+            return OrderResult(success=False, error=str(e))
+ 
+    def close_position(
+        self,
+        ticket: str,
+        volume: Optional[float] = None,
+    ) -> OrderResult:
+        self._ensure_connected()
+        try:
+            if volume is None:
+                body = {'longUnits': 'ALL', 'shortUnits': 'ALL'}
+            else:
+                units = str(int(round(volume * 100_000)))
+                body  = {'longUnits': units}
+ 
+            resp = self._session.put(
+                f"{self._base}/v3/accounts/{self._acct_id}/trades/{ticket}/close",
+                json=body,
+                timeout=self._timeout,
+            )
+            data = resp.json()
+            if resp.status_code == 200:
+                fc = data.get('orderFillTransaction', {})
+                self._logger.info(
+                    f"OANDA position closed: ticket={ticket} "
+                    f"price={fc.get('price')} pl={fc.get('pl')}"
+                )
+                return OrderResult(
+                    success     = True,
+                    ticket      = ticket,
+                    entry_price = float(fc.get('price', 0)),
+                    raw         = data,
+                )
+            err = data.get('errorMessage', str(data))
+            return OrderResult(success=False, error=err, raw=data)
+ 
+        except Exception as e:
+            return OrderResult(success=False, error=str(e))
+ 
+    def modify_position(
+        self,
+        ticket:      str,
+        stop_loss:   Optional[float] = None,
+        take_profit: Optional[float] = None,
+    ) -> bool:
+        self._ensure_connected()
+        body = {}
+        if stop_loss is not None:
+            body['stopLoss']   = {
+                'price': f"{stop_loss:.5f}", 'timeInForce': 'GTC'
+            }
+        if take_profit is not None:
+            body['takeProfit'] = {
+                'price': f"{take_profit:.5f}", 'timeInForce': 'GTC'
+            }
+        if not body:
+            return True   # nothing to modify
+ 
+        try:
+            resp = self._session.put(
+                f"{self._base}/v3/accounts/{self._acct_id}/trades/{ticket}/orders",
+                json=body,
+                timeout=self._timeout,
+            )
+            if resp.status_code == 200:
+                self._logger.info(
+                    f"OANDA modify: ticket={ticket} sl={stop_loss} tp={take_profit}"
+                )
+                return True
+            self._logger.warning(
+                f"OANDA modify failed: {resp.status_code} {resp.text[:100]}"
+            )
+            return False
+        except Exception as e:
+            self._logger.error(f"OANDA modify_position error: {e}")
+            return False
+ 
+    # ── Position queries ──────────────────────────────────────
+ 
+    def get_open_positions(
+        self,
+        symbol: Optional[str] = None,
+    ) -> List[PositionInfo]:
+        self._ensure_connected()
+        data   = self._get(f"/v3/accounts/{self._acct_id}/openTrades")
+        trades = data.get('trades', [])
+        result = []
+        for t in trades:
+            sym = t.get('instrument', '')
+            # Filter by symbol if requested
+            if symbol:
+                if _oanda_symbol(symbol) != sym and symbol != sym:
+                    continue
+            units = float(t.get('currentUnits', 0))
+            pos   = PositionInfo(
+                ticket        = str(t['id']),
+                symbol        = sym,
+                order_type    = 'buy' if units > 0 else 'sell',
+                volume        = round(abs(units) / 100_000, 5),
+                entry_price   = float(t.get('price', 0)),
+                current_price = float(t.get('price', 0)),
+                stop_loss     = (float(t['stopLossOrder']['price'])
+                                 if 'stopLossOrder' in t else None),
+                take_profit   = (float(t['takeProfitOrder']['price'])
+                                 if 'takeProfitOrder' in t else None),
+                profit        = float(t.get('unrealizedPL', 0)),
+                open_time     = t.get('openTime'),
+                comment       = t.get('clientExtensions', {}).get('comment', ''),
+            )
+            result.append(pos)
+        return result
+ 
+    def get_position(self, ticket: str) -> Optional[PositionInfo]:
+        self._ensure_connected()
+        try:
+            data  = self._get(
+                f"/v3/accounts/{self._acct_id}/trades/{ticket}"
+            )
+            t     = data.get('trade', {})
+            units = float(t.get('currentUnits', 0))
+            return PositionInfo(
+                ticket        = ticket,
+                symbol        = t.get('instrument', ''),
+                order_type    = 'buy' if units > 0 else 'sell',
+                volume        = round(abs(units) / 100_000, 5),
+                entry_price   = float(t.get('price', 0)),
+                current_price = float(t.get('price', 0)),
+                stop_loss     = (float(t['stopLossOrder']['price'])
+                                 if 'stopLossOrder' in t else None),
+                take_profit   = (float(t['takeProfitOrder']['price'])
+                                 if 'takeProfitOrder' in t else None),
+                profit        = float(t.get('unrealizedPL', 0)),
+                open_time     = t.get('openTime'),
+            )
+        except Exception as e:
+            self._logger.warning(f"get_position({ticket}) failed: {e}")
+            return None
+ 
+    # ── Internal HTTP helper ──────────────────────────────────
+ 
+    def _get(self, path: str, params: dict = None) -> dict:
+        """
+        Shared GET helper with error handling.
+        Raises on HTTP errors so callers get clean exceptions.
+        """
+        try:
+            resp = self._session.get(
+                f"{self._base}{path}",
+                params=params,
+                timeout=self._timeout,
+            )
+            if resp.status_code == 401:
+                raise BrokerAuthError("OANDA: 401 Unauthorized — check API key")
+            resp.raise_for_status()
+            return resp.json()
+        except BrokerAuthError:
+            raise
+        except requests.HTTPError as e:
+            self._logger.error(
+                f"OANDA HTTP error {e.response.status_code}: "
                 f"{e.response.text[:200]}"
             )
             raise
