@@ -6,6 +6,18 @@ from typing import Optional
 import math
 
 
+from utils.pip_calculator import (
+    get_pip_size        as _get_pip_size,
+    get_pip_value       as _get_pip_value,
+    price_to_pips       as _price_to_pips,
+    calculate_lot_size  as _calculate_lot_size,
+    profit_in_pips      as _profit_in_pips,
+    actual_rrr          as _actual_rrr,
+)
+from utils.risk_manager import RiskManager as _RiskManager
+ 
+ 
+
 class RiskCalculator:
     """
     Stateless calculator for all risk-related computations.
@@ -258,17 +270,6 @@ class RiskCalculator:
         return round(outcome / r, 2) if r > 0 else 0.0
     
 
-from utils.pip_calculator import (
-    get_pip_size        as _get_pip_size,
-    get_pip_value       as _get_pip_value,
-    price_to_pips       as _price_to_pips,
-    calculate_lot_size  as _calculate_lot_size,
-    profit_in_pips      as _profit_in_pips,
-    actual_rrr          as _actual_rrr,
-)
-from utils.risk_manager import RiskManager as _RiskManager
- 
- 
 class PipAwareRiskCalculator:
     """
     Extends the existing RiskCalculator with pip-based methods.
