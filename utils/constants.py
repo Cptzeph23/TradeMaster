@@ -132,3 +132,199 @@ class CommandType(models.TextChoices):
     SET_TIMEFRAME   = 'set_timeframe',  'Set Timeframe'
     SET_PAIRS       = 'set_pairs',      'Set Trading Pairs'
     UNKNOWN         = 'unknown',        'Unknown Command'
+
+
+# ── Symbol pip configuration ─────────────────────────────────
+# pip_size:    the value of 1 pip in price terms
+# pip_value:   USD value of 1 pip per 1 standard lot (100,000 units)
+#              For JPY pairs this is approximate at current rates.
+# min_lot:     minimum lot size allowed
+# max_lot:     maximum lot size allowed
+# lot_step:    lot increment
+# digits:      decimal places in price quote
+ 
+SYMBOL_CONFIG = {
+    # ── Gold / Metals ─────────────────────────────────────────
+    'XAUUSD': {
+        'pip_size':  0.01,      # 1 pip = $0.01 on Gold
+        'pip_value': 1.00,      # $1 per pip per 0.01 lot (micro)
+        'min_lot':   0.01,
+        'max_lot':   50.0,
+        'lot_step':  0.01,
+        'digits':    2,
+        'description': 'Gold vs US Dollar',
+        'category':  'metals',
+    },
+    'XAGUSD': {
+        'pip_size':  0.001,
+        'pip_value': 5.00,
+        'min_lot':   0.01,
+        'max_lot':   50.0,
+        'lot_step':  0.01,
+        'digits':    3,
+        'description': 'Silver vs US Dollar',
+        'category':  'metals',
+    },
+ 
+    # ── Major Forex Pairs ─────────────────────────────────────
+    'EURUSD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,     # $10 per pip per standard lot
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'Euro vs US Dollar',
+        'category':  'major',
+    },
+    'GBPUSD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'British Pound vs US Dollar',
+        'category':  'major',
+    },
+    'AUDUSD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'Australian Dollar vs US Dollar',
+        'category':  'major',
+    },
+    'NZDUSD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'New Zealand Dollar vs US Dollar',
+        'category':  'major',
+    },
+    'USDCAD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'US Dollar vs Canadian Dollar',
+        'category':  'major',
+    },
+    'USDCHF': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'US Dollar vs Swiss Franc',
+        'category':  'major',
+    },
+ 
+    # ── JPY Pairs (pip = 0.01) ────────────────────────────────
+    'USDJPY': {
+        'pip_size':  0.01,
+        'pip_value': 9.10,      # approx — varies with JPY rate
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    3,
+        'description': 'US Dollar vs Japanese Yen',
+        'category':  'major',
+    },
+    'EURJPY': {
+        'pip_size':  0.01,
+        'pip_value': 9.10,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    3,
+        'description': 'Euro vs Japanese Yen',
+        'category':  'cross',
+    },
+    'GBPJPY': {
+        'pip_size':  0.01,
+        'pip_value': 9.10,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    3,
+        'description': 'British Pound vs Japanese Yen',
+        'category':  'cross',
+    },
+    'AUDJPY': {
+        'pip_size':  0.01,
+        'pip_value': 9.10,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    3,
+        'description': 'Australian Dollar vs Japanese Yen',
+        'category':  'cross',
+    },
+ 
+    # ── Minor / Cross Pairs ───────────────────────────────────
+    'EURGBP': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'Euro vs British Pound',
+        'category':  'cross',
+    },
+    'EURAUD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'Euro vs Australian Dollar',
+        'category':  'cross',
+    },
+    'GBPAUD': {
+        'pip_size':  0.0001,
+        'pip_value': 10.00,
+        'min_lot':   0.01,
+        'max_lot':   100.0,
+        'lot_step':  0.01,
+        'digits':    5,
+        'description': 'British Pound vs Australian Dollar',
+        'category':  'cross',
+    },
+}
+ 
+# Convenience: set of all supported symbols
+SUPPORTED_SYMBOLS = set(SYMBOL_CONFIG.keys())
+ 
+# Priority symbols (client requirement — Gold first)
+PRIORITY_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY']
+ 
+# ── RRR choices ───────────────────────────────────────────────
+RRR_CHOICES = [
+    (1.0,  '1:1'),
+    (1.5,  '1:1.5'),
+    (2.0,  '1:2'),
+    (2.5,  '1:2.5'),
+    (3.0,  '1:3'),
+    (4.0,  '1:4'),
+    (5.0,  '1:5'),
+]
+ 
+# ── SL pip constraints (client requirement) ───────────────────
+SL_PIPS_MAX   = 50    # hard cap — never allow SL > 50 pips
+SL_PIPS_IDEAL = 20    # recommended target stop loss
+SL_PIPS_MIN   = 3     # prevent accidental near-zero SL
+ 
+# ── Default risk percent ──────────────────────────────────────
+DEFAULT_RISK_PERCENT = 1.0    # 1% of account per trade
+MAX_RISK_PERCENT     = 5.0    # hard cap per trade
