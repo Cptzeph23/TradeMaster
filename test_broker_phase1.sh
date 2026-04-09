@@ -9,8 +9,8 @@ GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m';  NC='\033[0m'
 PASS=0; FAIL=0
 
-pass() { echo -e "${GREEN}  ✅ PASS${NC} — $1"; ((PASS++)); }
-fail() { echo -e "${RED}  ❌ FAIL${NC} — $1"; ((FAIL++)); }
+pass() { echo -e "${GREEN}  ✅ PASS${NC} — $1"; ((PASS++)); return 0; }
+fail() { echo -e "${RED}  ❌ FAIL${NC} — $1"; ((FAIL++)); return 0; }
 warn() { echo -e "${YELLOW}  ⚠  WARN${NC} — $1"; }
 section() {
   echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

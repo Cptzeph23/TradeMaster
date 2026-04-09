@@ -77,6 +77,11 @@ class PriceInfo:
     spread:        float          = 0.0
     timestamp:     Optional[str]  = None  # ISO 8601
 
+    def __post_init__(self) -> None:
+        # Derive spread automatically when callers only provide bid/ask.
+        if self.spread == 0.0:
+            self.spread = round(self.ask - self.bid, 5)
+
     @property
     def mid(self) -> float:
         return round((self.bid + self.ask) / 2, 5)
@@ -90,6 +95,6 @@ class PriceInfo:
         if 'JPY' in self.symbol:
             return round(self.spread / 0.01, 1)
         elif 'XAU' in self.symbol or 'GOLD' in self.symbol:
-            return round(self.spread / 0.01, 1)
+            return round(self.spread / 0.1, 1)
         else:
             return round(self.spread / 0.0001, 1)
