@@ -62,3 +62,10 @@ env/
 *.err
 *.log.*
 *.log.*
+
+mt5linux.sh
+mt5linux.sh.1
+mt5setup.exe
+webview2.exe
+wget-log
+wget-log.1

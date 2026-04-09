@@ -20,8 +20,6 @@ ENVIRONMENTS = {
     'practice': 'https://api-fxpractice.oanda.com',
 }
 
-OANDA_BASE_URLS = ENVIRONMENTS
-
 # OANDA granularity strings
 TIMEFRAME_MAP = {
     'M1': 'M1', 'M5': 'M5', 'M15': 'M15', 'M30': 'M30',
