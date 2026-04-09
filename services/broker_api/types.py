@@ -3,26 +3,24 @@
 # Import these in base.py, oanda_service.py, mt5_service.py.
 # ============================================================
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Any, Dict
 
 
 @dataclass
 class AccountInfo:
-    """
-    Normalised account snapshot.
-    Same structure regardless of broker — OANDA or MT5.
-    """
     account_id:    str
     broker:        str
     balance:       float
     equity:        float
-    margin:        float         = 0.0
-    free_margin:   float         = 0.0
-    margin_level:  float         = 0.0   # percentage
-    currency:      str           = 'USD'
-    leverage:      int           = 100
-    is_live:       bool          = False  # False = demo
-    extra:         dict          = field(default_factory=dict)
+    # Ensure these have explicit float defaults to satisfy assertions
+    margin:        float = 0.0
+    free_margin:   float = 0.0
+    margin_level:  float = 0.0   
+    currency:      str   = 'USD'
+    leverage:      int   = 100
+    is_live:       bool  = False  
+    # Use the typing Dict for the hint
+    extra:         Dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_demo(self) -> bool:

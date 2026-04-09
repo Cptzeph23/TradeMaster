@@ -3,6 +3,10 @@
 # ============================================================
 import logging
 from .base import BrokerInterface
+from .oanda_service import OandaBroker
+from .mt5_service import MT5Broker
+from .exceptions import *
+from .types import *
 
 logger = logging.getLogger('trading.broker')
 
@@ -49,9 +53,7 @@ def get_broker_for_bot(bot) -> BrokerInterface:
 # ── Private builders ──────────────────────────────────────────
 
 def _build_oanda(account) -> 'OandaBroker':
-    from .oanda_service import OandaBroker
     from django.conf import settings
-
     try:
         api_key = account.get_api_key()
     except Exception:
