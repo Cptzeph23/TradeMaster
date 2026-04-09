@@ -256,3 +256,172 @@ class RiskCalculator:
         if order_type == 'sell':
             outcome = -outcome
         return round(outcome / r, 2) if r > 0 else 0.0
+    
+
+from utils.pip_calculator import (
+    get_pip_size        as _get_pip_size,
+    get_pip_value       as _get_pip_value,
+    price_to_pips       as _price_to_pips,
+    calculate_lot_size  as _calculate_lot_size,
+    profit_in_pips      as _profit_in_pips,
+    actual_rrr          as _actual_rrr,
+)
+from utils.risk_manager import RiskManager as _RiskManager
+ 
+ 
+class PipAwareRiskCalculator:
+    """
+    Extends the existing RiskCalculator with pip-based methods.
+ 
+    Drop-in addition — existing code is unchanged.
+    New code should use this class for pip/RRR-aware calculations.
+ 
+    Usage:
+        calc = PipAwareRiskCalculator(
+            account_balance=10000,
+            risk_percent=1.0,
+            rrr=2.0,
+        )
+        setup = calc.build_setup('XAUUSD', 'buy', entry=2350.0, sl_pips=20)
+        if setup:
+            # setup.sl_price, setup.tp_price, setup.lot_size all ready
+            broker.place_order(...)
+    """
+ 
+    def __init__(
+        self,
+        account_balance: float,
+        risk_percent:    float = 1.0,
+        rrr:             float = 2.0,
+    ):
+        self.account_balance = float(account_balance)
+        self.risk_percent    = float(risk_percent)
+        self.rrr             = float(rrr)
+        self._rm = _RiskManager(
+            account_balance = account_balance,
+            risk_percent    = risk_percent,
+            rrr             = rrr,
+        )
+ 
+    def build_setup(
+        self,
+        symbol:      str,
+        order_type:  str,
+        entry:       float,
+        sl_pips:     float,
+        rrr:         float = None,
+        risk_percent:float = None,
+    ):
+        """
+        Build a complete validated TradeSetup from pip inputs.
+        Returns TradeSetup or None if validation fails.
+        See utils.risk_manager.RiskManager.build_trade_setup() for full docs.
+        """
+        return self._rm.build_trade_setup(
+            symbol       = symbol,
+            order_type   = order_type,
+            entry        = entry,
+            sl_pips      = sl_pips,
+            rrr          = rrr,
+            risk_percent = risk_percent,
+        )
+ 
+    def validate(
+        self,
+        symbol:      str,
+        order_type:  str,
+        entry:       float,
+        sl:          float,
+        tp:          float,
+        lot_size:    float = None,
+        enforce_rrr: bool  = True,
+    ):
+        """
+        Validate an existing signal's SL/TP prices.
+        Returns ValidationResult — check .valid.
+        """
+        return self._rm.validate_trade(
+            symbol      = symbol,
+            order_type  = order_type,
+            entry       = entry,
+            sl          = sl,
+            tp          = tp,
+            lot_size    = lot_size,
+            enforce_rrr = enforce_rrr,
+        )
+ 
+    def enforce_rrr(
+        self,
+        symbol:      str,
+        order_type:  str,
+        entry:       float,
+        sl_price:    float,
+        rrr:         float = None,
+    ) -> tuple:
+        """
+        Recalculate TP from SL × RRR — ignores signal's original TP.
+        Returns (sl_price, tp_price, sl_pips, tp_pips).
+        """
+        return self._rm.enforce_rrr_on_signal(
+            symbol, order_type, entry, sl_price, rrr
+        )
+ 
+    def lot_size(
+        self,
+        symbol:   str,
+        sl_pips:  float,
+        risk_pct: float = None,
+    ) -> float:
+        """Calculate lot size using pip-based formula."""
+        return _calculate_lot_size(
+            account_balance = self.account_balance,
+            risk_percent    = risk_pct if risk_pct is not None else self.risk_percent,
+            sl_pips         = sl_pips,
+            symbol          = symbol,
+        )
+ 
+    def pips(self, symbol: str, price_distance: float) -> float:
+        """Convert price distance to pips."""
+        return _price_to_pips(symbol, price_distance)
+ 
+    def pip_size(self, symbol: str) -> float:
+        """Return pip size for a symbol."""
+        return _get_pip_size(symbol)
+ 
+    def profit_pips(
+        self,
+        symbol:      str,
+        entry:       float,
+        exit_price:  float,
+        order_type:  str,
+    ) -> float:
+        """Calculate profit/loss in pips for a closed trade."""
+        return _profit_in_pips(symbol, entry, exit_price, order_type)
+ 
+    def achieved_rrr(
+        self,
+        symbol:      str,
+        entry:       float,
+        exit_price:  float,
+        sl_price:    float,
+        order_type:  str,
+    ) -> float:
+        """Return the actual RRR achieved on a closed trade."""
+        return _actual_rrr(symbol, entry, exit_price, sl_price, order_type)
+ 
+    @staticmethod
+    def from_bot(bot) -> 'PipAwareRiskCalculator':
+        """
+        Build a PipAwareRiskCalculator from a TradingBot instance.
+        Reads balance from linked TradingAccount and risk settings from bot.
+        """
+        balance  = float(
+            getattr(bot.trading_account, 'balance', 10000) or 10000
+        )
+        settings = getattr(bot, 'risk_settings', {}) or {}
+        risk_pct = float(settings.get('risk_percent', 1.0))
+        rrr      = float(settings.get('risk_reward_ratio', 2.0))
+        return PipAwareRiskCalculator(balance, risk_pct, rrr)
+ 
+
+
