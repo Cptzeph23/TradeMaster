@@ -18,7 +18,7 @@ from apps.trading.dashboard_views import (
 )
 from apps.trading.mobile_urls import mobile_urlpatterns
 from apps.accounts.portfolio_urls import portfolio_urlpatterns
-
+from apps.accounts.performance_urls import performance_urlpatterns
 
 API_V1 = 'api/v1/'
 
@@ -83,6 +83,9 @@ urlpatterns = [
 
     # ── WebSocket fallback ─────────────────────────────────────
     path('ws/<path:path>', ws_unavailable, name='ws-fallback'),
+
+    path('api/v1/performance/', include((performance_urlpatterns, 'performance'))),
+
 ]
 
 # ── Telegram webhook (only if token configured) ────────────
