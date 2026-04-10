@@ -119,42 +119,108 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Profile({self.user.email})"
+    
 
 
+class BrokerType(models.TextChoices):
+    OANDA = 'oanda', 'OANDA'
+    MT5   = 'mt5',   'MetaTrader 5'
+    OTHER = 'other', 'Other'
+ 
+ 
+class AccountType(models.TextChoices):
+    PERSONAL = 'personal', 'Personal'
+    FUNDED   = 'funded',   'Funded Account'
+    DEMO     = 'demo',     'Demo / Practice'
+    CONTEST  = 'contest',  'Contest'
+ 
+ 
+class FundedFirm(models.TextChoices):
+    FTMO          = 'ftmo',          'FTMO'
+    MFF           = 'mff',           'MyForexFunds'
+    TRUE_FOREX    = 'true_forex',    'True Forex Funds'
+    FUNDED_NEXT   = 'funded_next',   'FundedNext'
+    ALPHA_CAPITAL = 'alpha_capital', 'Alpha Capital Group'
+    E8_FUNDING    = 'e8_funding',    'E8 Funding'
+    OTHER         = 'other',         'Other'
+    NONE          = '',              'N/A'
+ 
+
+
+
+
+
+
+# ── TradingAccount ───────────────────────────────────────────
 # ── TradingAccount ───────────────────────────────────────────
 class TradingAccount(models.Model):
     """
     Broker trading account linked to a User.
-    API keys are stored ENCRYPTED using Fernet AES.
-    A user may have multiple accounts (demo + live, multiple brokers).
     """
-    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user        = models.ForeignKey(
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
         User, on_delete=models.CASCADE,
         related_name='trading_accounts'
     )
     
-    # Portfolio relationship - using string reference
     portfolio = models.ForeignKey(
-        'accounts.Portfolio',  # String reference to avoid circular import
+        'accounts.Portfolio',
         on_delete=models.SET_NULL,
         null=True, blank=True, 
         related_name='trading_accounts'
     )
 
     # Account identity
-    name        = models.CharField(max_length=150)
-    broker      = models.CharField(max_length=30, choices=Broker.choices)
-    account_id  = models.CharField(max_length=100)
+    name = models.CharField(max_length=150)
+    broker = models.CharField(max_length=30, choices=Broker.choices)
+
+    
+    broker_type = models.CharField(
+        max_length=20,
+        choices=BrokerType.choices,
+        default=BrokerType.OANDA,
+        help_text='Broker connector type (OANDA REST or MT5)',
+    )
+    
+    # Note: Removed the duplicate account_type definition that was further down
     account_type = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=AccountType.choices,
-        default=AccountType.DEMO
+        default=AccountType.DEMO,
+        help_text='Account category — personal, funded, demo',
+    )
+    
+    funded_firm = models.CharField(
+        max_length=30,
+        choices=FundedFirm.choices,
+        default='',
+        blank=True,
+        help_text='Funded firm name (FTMO, MFF, etc.) — leave blank for personal',
+    )
+    
+    max_loss_limit = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Maximum allowed loss for funded accounts (USD)',
+    )
+    
+    profit_target = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Profit target for funded account challenge (USD)',
+    )
+    
+    daily_loss_limit = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Daily max drawdown limit (USD) — funded account rule',
     )
 
+    account_id = models.CharField(max_length=100)
+
     # ── Encrypted broker credentials ─────────────────────────
-    _api_key_encrypted      = models.TextField(blank=True, db_column='api_key')
-    _api_secret_encrypted   = models.TextField(blank=True, db_column='api_secret')
+    _api_key_encrypted = models.TextField(blank=True, db_column='api_key')
+    _api_secret_encrypted = models.TextField(blank=True, db_column='api_secret')
 
     # Account financials (synced periodically from broker)
     balance         = models.DecimalField(max_digits=18, decimal_places=2, default=0)
@@ -338,69 +404,3 @@ class AccountAllocation(models.Model):
     
     
 
-class BrokerType(models.TextChoices):
-    OANDA = 'oanda', 'OANDA'
-    MT5   = 'mt5',   'MetaTrader 5'
-    OTHER = 'other', 'Other'
- 
- 
-class AccountType(models.TextChoices):
-    PERSONAL = 'personal', 'Personal'
-    FUNDED   = 'funded',   'Funded Account'
-    DEMO     = 'demo',     'Demo / Practice'
-    CONTEST  = 'contest',  'Contest'
- 
- 
-class FundedFirm(models.TextChoices):
-    FTMO          = 'ftmo',          'FTMO'
-    MFF           = 'mff',           'MyForexFunds'
-    TRUE_FOREX    = 'true_forex',    'True Forex Funds'
-    FUNDED_NEXT   = 'funded_next',   'FundedNext'
-    ALPHA_CAPITAL = 'alpha_capital', 'Alpha Capital Group'
-    E8_FUNDING    = 'e8_funding',    'E8 Funding'
-    OTHER         = 'other',         'Other'
-    NONE          = '',              'N/A'
- 
- 
-# ── Step 2: Add these fields to TradingAccount ────────────────
-# Find the TradingAccount class and add these fields.
-# Best placed after the existing `broker` CharField.
- 
-TRADING_ACCOUNT_NEW_FIELDS = """
-    # ── Phase 3: Broker + account type ────────────────────────
-    broker_type   = models.CharField(
-        max_length  = 20,
-        choices     = BrokerType.choices,
-        default     = BrokerType.OANDA,
-        help_text   = 'Broker connector type (OANDA REST or MT5)',
-    )
-    account_type  = models.CharField(
-        max_length  = 20,
-        choices     = AccountType.choices,
-        default     = AccountType.DEMO,
-        help_text   = 'Account category — personal, funded, demo',
-    )
-    funded_firm   = models.CharField(
-        max_length  = 30,
-        choices     = FundedFirm.choices,
-        default     = '',
-        blank       = True,
-        help_text   = 'Funded firm name (FTMO, MFF, etc.) — leave blank for personal',
-    )
-    max_loss_limit = models.FloatField(
-        null        = True,
-        blank       = True,
-        help_text   = 'Maximum allowed loss for funded accounts (USD)',
-    )
-    profit_target  = models.FloatField(
-        null        = True,
-        blank       = True,
-        help_text   = 'Profit target for funded account challenge (USD)',
-    )
-    daily_loss_limit = models.FloatField(
-        null        = True,
-        blank       = True,
-        help_text   = 'Daily max drawdown limit (USD) — funded account rule',
-    )
-"""
- 

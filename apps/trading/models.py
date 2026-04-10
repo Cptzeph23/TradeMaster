@@ -145,6 +145,7 @@ class Trade(models.Model):
     )
     trading_account = models.ForeignKey(
         'accounts.TradingAccount', on_delete=models.PROTECT,
+        null=True, blank=True,
         related_name='trades'
     )
 
@@ -193,6 +194,13 @@ class Trade(models.Model):
     closed_at       = models.DateTimeField(null=True, blank=True)
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
+
+    sl_pips = models.FloatField(null=True, blank=True)
+    tp_pips = models.FloatField(null=True, blank=True)
+    profit_pips = models.FloatField(null=True, blank=True)
+    rrr_used = models.FloatField(null=True, blank=True)
+    rrr_achieved = models.FloatField(null=True, blank=True)
+    account_label = models.CharField(max_length=100, blank=True)
 
     class Meta:
         db_table    = 'trading_trade'
