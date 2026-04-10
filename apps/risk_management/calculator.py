@@ -423,6 +423,8 @@ class PipAwareRiskCalculator:
         risk_pct = float(settings.get('risk_percent', 1.0))
         rrr      = float(settings.get('risk_reward_ratio', 2.0))
         return PipAwareRiskCalculator(balance, risk_pct, rrr)
+    
+    
  
 
 

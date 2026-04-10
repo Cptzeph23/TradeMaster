@@ -337,3 +337,70 @@ class AccountAllocation(models.Model):
         return f"{self.portfolio.name} → {self.account.name} ({self.allocation_pct}%)"
     
     
+
+class BrokerType(models.TextChoices):
+    OANDA = 'oanda', 'OANDA'
+    MT5   = 'mt5',   'MetaTrader 5'
+    OTHER = 'other', 'Other'
+ 
+ 
+class AccountType(models.TextChoices):
+    PERSONAL = 'personal', 'Personal'
+    FUNDED   = 'funded',   'Funded Account'
+    DEMO     = 'demo',     'Demo / Practice'
+    CONTEST  = 'contest',  'Contest'
+ 
+ 
+class FundedFirm(models.TextChoices):
+    FTMO          = 'ftmo',          'FTMO'
+    MFF           = 'mff',           'MyForexFunds'
+    TRUE_FOREX    = 'true_forex',    'True Forex Funds'
+    FUNDED_NEXT   = 'funded_next',   'FundedNext'
+    ALPHA_CAPITAL = 'alpha_capital', 'Alpha Capital Group'
+    E8_FUNDING    = 'e8_funding',    'E8 Funding'
+    OTHER         = 'other',         'Other'
+    NONE          = '',              'N/A'
+ 
+ 
+# ── Step 2: Add these fields to TradingAccount ────────────────
+# Find the TradingAccount class and add these fields.
+# Best placed after the existing `broker` CharField.
+ 
+TRADING_ACCOUNT_NEW_FIELDS = """
+    # ── Phase 3: Broker + account type ────────────────────────
+    broker_type   = models.CharField(
+        max_length  = 20,
+        choices     = BrokerType.choices,
+        default     = BrokerType.OANDA,
+        help_text   = 'Broker connector type (OANDA REST or MT5)',
+    )
+    account_type  = models.CharField(
+        max_length  = 20,
+        choices     = AccountType.choices,
+        default     = AccountType.DEMO,
+        help_text   = 'Account category — personal, funded, demo',
+    )
+    funded_firm   = models.CharField(
+        max_length  = 30,
+        choices     = FundedFirm.choices,
+        default     = '',
+        blank       = True,
+        help_text   = 'Funded firm name (FTMO, MFF, etc.) — leave blank for personal',
+    )
+    max_loss_limit = models.FloatField(
+        null        = True,
+        blank       = True,
+        help_text   = 'Maximum allowed loss for funded accounts (USD)',
+    )
+    profit_target  = models.FloatField(
+        null        = True,
+        blank       = True,
+        help_text   = 'Profit target for funded account challenge (USD)',
+    )
+    daily_loss_limit = models.FloatField(
+        null        = True,
+        blank       = True,
+        help_text   = 'Daily max drawdown limit (USD) — funded account rule',
+    )
+"""
+ 
