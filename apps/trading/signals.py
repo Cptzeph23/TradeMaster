@@ -37,7 +37,7 @@ def broadcast_and_alert_trade(sender, instance, created, **kwargs):
     """
     try:
         from services.realtime.broadcaster import notify_trade_event
-        from services.telegram.alerts import alert_trade_opened, alert_trade_closed
+        from services.telegram.alerts import alert_trade_opened, alert_trade_closed, check_drawdown_alert
 
         if created and instance.status == TradeStatus.OPEN:
             notify_trade_event(instance, 'opened')
@@ -46,6 +46,19 @@ def broadcast_and_alert_trade(sender, instance, created, **kwargs):
         elif not created and instance.status == TradeStatus.CLOSED:
             notify_trade_event(instance, 'closed')
             alert_trade_closed(instance)
+            check_drawdown_alert(instance.bot)
+ 
+            # update performance metrics ────
+            try:
+                from apps.accounts.performance_service import PerformanceService
+                PerformanceService.update_for_trade(instance)
+            except Exception as e:
+                import logging
+                logging.getLogger('trading').warning(
+                    f'Performance update failed for trade {instance.id}: {e}'
+                )
+
+ 
 
     except Exception as e:
         logger.warning(f"broadcast_and_alert_trade failed: {e}")

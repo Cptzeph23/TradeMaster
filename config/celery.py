@@ -101,6 +101,14 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=22, minute=0, day_of_week=0),  # Sunday
         'options':  {'queue': 'data'},
     },
+
+    # ── Performance daily snapshots ───────────────────────────
+    # Performance daily snapshots at 00:05 UTC
+    'performance-daily-snapshots': {
+        'task':    'workers.scheduler.daily_snapshots',
+        'schedule': crontab(hour=0, minute=5),
+        'options': {'queue': 'default'},
+    },
 }
 
 app.conf.beat_scheduler         = 'django_celery_beat.schedulers:DatabaseScheduler'
@@ -113,3 +121,4 @@ app.conf.task_reject_on_worker_lost = True # requeue if worker dies mid-task
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     print(f'Celery health check OK — worker={self.request.hostname}')
+

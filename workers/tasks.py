@@ -281,5 +281,39 @@ def send_telegram_daily_report():
     date_str = today_start.strftime('%Y-%m-%d')
     send_daily_report(date_str, stats)
     return stats
+
+
+
+@shared_task(name='performance.update_account', ignore_result=True)
+def update_account_performance(account_id: str):
+    '''Recalculate performance for one account — called after trade close.'''
+    try:
+        from apps.accounts.models import TradingAccount
+        from apps.accounts.performance_service import PerformanceService
+        account = TradingAccount.objects.get(pk=account_id)
+        svc     = PerformanceService(account)
+        svc.update()
+    except Exception as e:
+        import logging
+        logging.getLogger('trading').error(
+            f'update_account_performance failed: {e}', exc_info=True
+        )
+ 
+ 
+@shared_task(name='performance.daily_snapshots', ignore_result=True)
+def take_daily_performance_snapshots():
+    '''Take daily snapshot for ALL active accounts — run at midnight UTC.'''
+    from apps.accounts.models import TradingAccount
+    from apps.accounts.performance_service import PerformanceService
+    accounts = TradingAccount.objects.filter(is_active=True)
+    for acct in accounts:
+        try:
+            PerformanceService(acct).take_daily_snapshot()
+        except Exception as e:
+            import logging
+            logging.getLogger('trading').error(
+                f'Daily snapshot failed for {acct.name}: {e}'
+            )
+
  
 
