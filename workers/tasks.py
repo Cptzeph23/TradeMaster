@@ -246,7 +246,7 @@ def send_telegram_daily_report():
     from datetime import datetime, timezone, timedelta
     from apps.trading.models import TradingBot, Trade
     from utils.constants import TradeStatus, BotStatus
-    from services.telegram.alerts import send_daily_report
+    from services.telegram.messages import send_daily_report
  
     today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0

@@ -37,7 +37,7 @@ def broadcast_and_alert_trade(sender, instance, created, **kwargs):
     """
     try:
         from services.realtime.broadcaster import notify_trade_event
-        from services.telegram.alerts import alert_trade_opened, alert_trade_closed, check_drawdown_alert
+        from services.telegram.messages import alert_trade_opened, alert_trade_closed, check_drawdown_alert
 
         if created and instance.status == TradeStatus.OPEN:
             notify_trade_event(instance, 'opened')
@@ -104,7 +104,7 @@ def broadcast_and_alert_bot_status(sender, instance, created, **kwargs):
 
     # Telegram alerts for significant status changes
     try:
-        from services.telegram import alerts as tg
+        from services.telegram import messages as tg
 
         if instance.status == BotStatus.RUNNING and not created:
             tg.alert_bot_started(
