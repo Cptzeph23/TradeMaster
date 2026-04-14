@@ -54,6 +54,12 @@ class StrategyRegistry:
             'apps.strategies.plugins.rsi_reversal',
             'apps.strategies.plugins.breakout',
             'apps.strategies.plugins.mean_reversion',
+            'apps.strategies.plugins.ichimoku',        
+            'apps.strategies.plugins.macd_divergence',  
+            'apps.strategies.plugins.stochastic',      
+            'apps.strategies.plugins.ema_ribbon',       
+            'apps.strategies.plugins.atr_breakout',    
+            'apps.strategies.plugins.gold_xauusd',
         ]
         for module_path in plugin_modules:
             try:
@@ -66,21 +72,27 @@ class StrategyRegistry:
                     + traceback.format_exc()
                 )
 
+
     @classmethod
     def get_schema_list(cls) -> list:
         result = []
         for slug, strategy_cls in cls._registry.items():
             try:
+               
                 inst = strategy_cls()
-            except Exception:
-                inst = None
-            result.append({
-                'slug':               slug,
-                'name':               strategy_cls.name,
-                'version':            strategy_cls.version,
-                'description':        strategy_cls.description,
-                'default_parameters': strategy_cls.get_default_parameters(),
-                'parameter_schema':   strategy_cls.get_parameter_schema(),
-                'required_candles':   inst.get_required_candles() if inst else 0,
-            })
+                
+                
+                result.append({
+                    'slug':               slug,
+                    'name':               strategy_cls.name,
+                    'version':            strategy_cls.version,
+                    'description':        strategy_cls.description,
+                    'default_parameters': inst.get_default_parameters(),  # Changed from strategy_cls
+                    'parameter_schema':   inst.get_parameter_schema(),    # Changed from strategy_cls
+                    'required_candles':   inst.get_required_candles(),
+                })
+            except Exception as e:
+               
+                logger.error(f"Failed to generate schema for '{slug}': {str(e)}")
+                continue 
         return result
