@@ -67,6 +67,7 @@ class StrategyType(models.TextChoices):
     STOCHASTIC     = 'stochastic',      'Stochastic Oscillator'
     EMA_RIBBON     = 'ema_ribbon',      'EMA Ribbon'
     ATR_BREAKOUT   = 'atr_breakout',    'ATR Channel Breakout'
+    GOLD_XAUUSD    = 'gold_xauusd',     'Gold XAUUSD'
 
 
 # ── Signal Types ─────────────────────────────────────────────
